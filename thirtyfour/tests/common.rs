@@ -58,7 +58,7 @@ pub fn start_server() -> Arc<JoinHandle<()>> {
                     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
                     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
                     let app = axum::Router::new()
-                        .nest_service("/", tower_http::services::ServeDir::new(ASSETS_DIR));
+                        .fallback_service(tower_http::services::ServeDir::new(ASSETS_DIR));
                     axum::serve(listener, app).await.unwrap();
                 });
             });
@@ -87,7 +87,7 @@ pub fn get_limiter() -> &'static Semaphore {
 /// Locks the Firefox browser for exclusive use.
 ///
 /// This ensures there is only ever one Firefox browser running at a time.
-pub async fn lock_firefox<'a>(browser: &str) -> Option<SemaphorePermit<'static>> {
+pub async fn lock_firefox(browser: &str) -> Option<SemaphorePermit<'static>> {
     if browser == "firefox" {
         Some(get_limiter().acquire().await.unwrap())
     } else {
