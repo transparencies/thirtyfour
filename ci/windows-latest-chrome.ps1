@@ -1,3 +1,2 @@
-choco install googlechrome
-choco install chromedriver
-Start-Process -FilePath chromedriver --port=9515
+# Fix: sometimes, Chrome is updated but its checksum is not. Ignore this mismatch.
+choco install googlechrome --ignore-checksums -y
