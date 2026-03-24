@@ -7,7 +7,9 @@ use thirtyfour::prelude::*;
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    std::env::set_var("RUST_BACKTRACE", "1");
+    unsafe {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
 
     let caps = DesiredCapabilities::chrome();
     let server_url = "http://localhost:9515";

@@ -2,7 +2,7 @@
 name = "thirtyfour"
 version = "0.36.1"
 authors = ["Steve Pryde <steve@stevepryde.com>", "Vrtgs <vrtgs@vrtgs.xyz>"]
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 description = """
 Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI testing.
@@ -28,9 +28,9 @@ categories = [
 ]
 
 [features]
-default = ["reqwest", "rustls-tls", "component", "selenium-manager"]
+default = ["reqwest", "rustls", "component", "selenium-manager"]
 reqwest = ["dep:reqwest"]
-rustls-tls = ["reqwest/rustls-tls"]
+rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 selenium-manager = ["dep:selenium-manager", "libc"]
 tokio-multi-threaded = ["tokio/rt-multi-thread"]
@@ -46,7 +46,7 @@ futures-util = { version = "0.3.31", default-features = false, features = ["allo
 http = "1"
 indexmap = "2"
 libc = { version = "0.2", optional = true }
-pastey = "0.1"
+pastey = "0.2"
 selenium-manager = { path = "../selenium/rust", optional = true }
 serde = { version = "1.0.210", features = ["derive", "rc"] }
 serde_json = { version = "1.0.132", features = ["preserve_order"] }
@@ -68,7 +68,7 @@ url = "2.5.2"
 const_format = "0.2.33"
 
 # Optional HTTP client. Not needed if you supply your own.
-reqwest = { version = "0.12.8", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "json",
 ], optional = true }
 
