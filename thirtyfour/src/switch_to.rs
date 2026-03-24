@@ -1,10 +1,10 @@
+use crate::WindowHandle;
 use crate::common::command::Command;
 use crate::error::WebDriverErrorInfo;
 use crate::session::handle::SessionHandle;
-use crate::WindowHandle;
 use crate::{
-    error::{WebDriverError, WebDriverResult},
     Alert, WebElement,
+    error::{WebDriverError, WebDriverResult},
 };
 use std::sync::Arc;
 

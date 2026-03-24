@@ -7,10 +7,10 @@ use std::{
 };
 
 use rstest::fixture;
+use thirtyfour::{ChromeCapabilities, support::block_on};
 use thirtyfour::{
-    prelude::*, start_webdriver_process_full, WebDriverProcessBrowser, WebDriverProcessPort,
+    WebDriverProcessBrowser, WebDriverProcessPort, prelude::*, start_webdriver_process_full,
 };
-use thirtyfour::{support::block_on, ChromeCapabilities};
 use tokio::sync::{Semaphore, SemaphorePermit};
 
 static SERVER: OnceLock<Arc<JoinHandle<()>>> = OnceLock::new();
@@ -76,7 +76,7 @@ pub fn start_server() -> Arc<JoinHandle<()>> {
 
 pub fn init_logging() {
     LOGINIT.get_or_init(|| {
-        use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+        use tracing_subscriber::{EnvFilter, fmt, prelude::*};
         tracing_subscriber::registry()
             .with(fmt::layer())
             .with(EnvFilter::from_default_env())

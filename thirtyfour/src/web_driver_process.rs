@@ -6,9 +6,9 @@ use std::time::Duration;
 use libc::atexit;
 use selenium_manager::get_manager_by_browser;
 
+use crate::CapabilitiesHelper;
 use crate::error::WebDriverResult;
 use crate::prelude::WebDriverError;
-use crate::CapabilitiesHelper;
 
 #[derive(Debug)]
 /// This uses the Selenium Manager to automatically download the appropriate web

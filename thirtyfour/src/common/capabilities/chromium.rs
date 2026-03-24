@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use pastey::paste;
 use serde::Serialize;
-use serde_json::{json, to_value, Value};
+use serde_json::{Value, json, to_value};
 
 use crate::error::WebDriverResult;
 use crate::{BrowserCapabilitiesHelper, Capabilities, CapabilitiesHelper};

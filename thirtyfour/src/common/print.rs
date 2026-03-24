@@ -1,4 +1,4 @@
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use std::sync::Arc;
 
 /// Enum representing the ranges of pages to print

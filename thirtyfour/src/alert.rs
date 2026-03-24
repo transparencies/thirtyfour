@@ -1,7 +1,7 @@
+use crate::TypingData;
 use crate::common::command::Command;
 use crate::error::WebDriverResult;
 use crate::session::handle::SessionHandle;
-use crate::TypingData;
 use std::sync::Arc;
 
 /// Struct for managing alerts.

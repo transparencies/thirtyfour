@@ -1,12 +1,12 @@
 use crate::session::handle::SessionHandle;
 use crate::{
+    WebElement,
     common::{
         action::{ActionSource, KeyAction, PointerAction, PointerActionType},
         command::{Actions, Command},
         keys::TypingData,
     },
     error::WebDriverResult,
-    WebElement,
 };
 use std::sync::Arc;
 use std::time::Duration;

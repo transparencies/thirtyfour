@@ -19,7 +19,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::error::{no_such_element, WebDriverErrorInner, WebDriverResult};
+use crate::error::{WebDriverErrorInner, WebDriverResult, no_such_element};
 use crate::{By, WebElement};
 use std::fmt::{Display, Formatter};
 

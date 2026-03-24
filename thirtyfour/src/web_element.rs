@@ -9,9 +9,9 @@ use crate::error::{WebDriverError, WebDriverErrorInner};
 use crate::js::SIMULATE_DRAG_AND_DROP;
 use crate::session::handle::SessionHandle;
 use crate::support::base64_decode;
-use crate::{common::types::ElementRect, error::WebDriverResult, By, ElementRef};
-use crate::{support, IntoArcStr};
+use crate::{By, ElementRef, common::types::ElementRect, error::WebDriverResult};
 use crate::{ElementId, TypingData};
+use crate::{IntoArcStr, support};
 
 /// The WebElement struct encapsulates a single element on a page.
 ///

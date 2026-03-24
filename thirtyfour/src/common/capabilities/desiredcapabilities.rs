@@ -1,7 +1,8 @@
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{from_value, json, to_value, Value};
+use serde_json::{Value, from_value, json, to_value};
 
+use crate::ChromiumCapabilities;
 use crate::common::capabilities::chrome::ChromeCapabilities;
 use crate::common::capabilities::edge::EdgeCapabilities;
 use crate::common::capabilities::firefox::FirefoxCapabilities;
@@ -9,7 +10,6 @@ use crate::common::capabilities::ie::InternetExplorerCapabilities;
 use crate::common::capabilities::opera::OperaCapabilities;
 use crate::common::capabilities::safari::SafariCapabilities;
 use crate::error::WebDriverResult;
-use crate::ChromiumCapabilities;
 
 /// Type alias for a generic Capabilities struct.
 pub type Capabilities = serde_json::Map<String, Value>;

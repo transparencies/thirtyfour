@@ -1,8 +1,8 @@
 use super::conditions::{collect_arg_slice, handle_errors};
-use super::{conditions, ElementPollerWithTimeout, IntoElementPoller};
+use super::{ElementPollerWithTimeout, IntoElementPoller, conditions};
+use crate::IntoArcStr;
 use crate::error::WebDriverError;
 use crate::prelude::WebDriverResult;
-use crate::IntoArcStr;
 use crate::{DynElementPredicate, ElementPredicate, WebElement};
 use std::ops::Deref;
 use std::sync::Arc;

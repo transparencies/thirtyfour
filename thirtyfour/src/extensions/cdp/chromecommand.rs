@@ -1,8 +1,8 @@
-use crate::{common::command::FormatRequestData, RequestData};
+use crate::{RequestData, common::command::FormatRequestData};
 
 use super::NetworkConditions;
 use http::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Extra commands specific to Chrome.
 #[derive(Debug)]

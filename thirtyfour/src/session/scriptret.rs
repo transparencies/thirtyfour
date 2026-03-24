@@ -1,6 +1,6 @@
+use crate::WebElement;
 use crate::error::WebDriverResult;
 use crate::session::handle::SessionHandle;
-use crate::WebElement;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::sync::Arc;

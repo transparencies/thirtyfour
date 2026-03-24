@@ -175,13 +175,15 @@ pub use switch_to::SwitchTo;
 pub use web_driver::WebDriver;
 #[cfg(feature = "selenium-manager")]
 pub use web_driver_process::{
-    start_webdriver_process, start_webdriver_process_full, WebDriverProcess,
-    WebDriverProcessBrowser, WebDriverProcessPort,
+    WebDriverProcess, WebDriverProcessBrowser, WebDriverProcessPort, start_webdriver_process,
+    start_webdriver_process_full,
 };
 pub use web_element::WebElement;
 
 /// Allow importing the common types via `use thirtyfour::prelude::*`.
 pub mod prelude {
+    pub use crate::WebDriver;
+    pub use crate::WebElement;
     pub use crate::alert::Alert;
     pub use crate::error::{WebDriverError, WebDriverResult};
     pub use crate::extensions::query::{ElementPoller, ElementQueryable, ElementWaitable};
@@ -189,8 +191,6 @@ pub mod prelude {
     #[cfg(feature = "selenium-manager")]
     pub use crate::start_webdriver_process;
     pub use crate::switch_to::SwitchTo;
-    pub use crate::WebDriver;
-    pub use crate::WebElement;
     pub use crate::{
         BrowserCapabilitiesHelper, By, Capabilities, CapabilitiesHelper, ChromiumLikeCapabilities,
         DesiredCapabilities,

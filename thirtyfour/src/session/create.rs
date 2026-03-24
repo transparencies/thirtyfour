@@ -4,13 +4,13 @@ use url::Url;
 use super::http::HttpClient;
 use crate::error::WebDriverErrorInner;
 use crate::{
+    Capabilities, SessionId, TimeoutConfiguration,
     common::{
         command::{Command, FormatRequestData},
         config::WebDriverConfig,
     },
     prelude::WebDriverResult,
     session::http::run_webdriver_cmd,
-    Capabilities, SessionId, TimeoutConfiguration,
 };
 
 /// Start a new WebDriver session, returning the session id and the

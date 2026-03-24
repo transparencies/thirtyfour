@@ -3,7 +3,7 @@
 //!     cargo run --example firefox_preferences
 
 use thirtyfour::common::capabilities::firefox::FirefoxPreferences;
-use thirtyfour::{start_webdriver_process, FirefoxCapabilities, WebDriver};
+use thirtyfour::{FirefoxCapabilities, WebDriver, start_webdriver_process};
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {

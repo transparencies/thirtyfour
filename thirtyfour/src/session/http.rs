@@ -3,16 +3,16 @@ use std::sync::Arc;
 use base64::Engine;
 use bytes::Bytes;
 use http::{
-    header::{ACCEPT, AUTHORIZATION, CONNECTION, CONTENT_TYPE, USER_AGENT},
     HeaderValue, Request, Response,
+    header::{ACCEPT, AUTHORIZATION, CONNECTION, CONTENT_TYPE, USER_AGENT},
 };
 use serde_json::Value;
 use url::Url;
 
 use crate::{
+    ElementId, ElementRef, RequestData, WebElement,
     common::config::WebDriverConfig,
     prelude::{WebDriverError, WebDriverResult},
-    ElementId, ElementRef, RequestData, WebElement,
 };
 
 use super::handle::SessionHandle;

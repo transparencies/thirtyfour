@@ -99,9 +99,9 @@ mod sealed {
 
     use futures_util::{StreamExt, TryStreamExt};
 
+    use crate::WebElement;
     use crate::components::Component;
     use crate::error::WebDriverResult;
-    use crate::WebElement;
 
     pub trait Resolve: Sized {
         fn is_present(&self) -> impl Future<Output = WebDriverResult<bool>> + Send;

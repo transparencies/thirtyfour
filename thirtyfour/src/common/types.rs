@@ -5,8 +5,8 @@ use std::{fmt, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::WebDriverResult;
 use crate::WebElement;
+use crate::error::WebDriverResult;
 
 mod sealed {
     use crate::error::{WebDriverError, WebDriverResult};

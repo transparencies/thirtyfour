@@ -1,6 +1,8 @@
 use http::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use crate::IntoArcStr;
+use crate::RequestData;
 use crate::common::{
     capabilities::desiredcapabilities::make_w3c_caps,
     cookie::Cookie,
@@ -8,8 +10,6 @@ use crate::common::{
     print::PrintParameters,
     types::{ElementId, OptionRect, SessionId, TimeoutConfiguration, WindowHandle},
 };
-use crate::IntoArcStr;
-use crate::RequestData;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::Arc;
