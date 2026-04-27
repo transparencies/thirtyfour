@@ -1,6 +1,6 @@
 [package]
 name = "thirtyfour"
-version = "0.36.1"
+version = "0.36.2"
 authors = ["Steve Pryde <steve@stevepryde.com>", "Vrtgs <vrtgs@vrtgs.xyz>"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
@@ -39,10 +39,15 @@ debug_sync_quit = []
 
 
 [dependencies]
+arc-swap = "1"
 async-trait = "0.1.83"
 base64 = "0.22"
 bytes = "1"
-futures-util = { version = "0.3.31", default-features = false, features = ["alloc"] }
+cfg-if = "1.0.0"
+const_format = "0.2.33"
+futures-util = { version = "0.3.31", default-features = false, features = [
+    "alloc",
+] }
 http = "1"
 indexmap = "2"
 libc = { version = "0.2", optional = true }
@@ -54,7 +59,6 @@ serde_repr = "0.1.19"
 stringmatch = "0.4"
 thirtyfour-macros = { path = "../thirtyfour-macros", version = "0.2.0", optional = true }
 thiserror = "2.0.12"
-arc-swap = "1"
 tokio = { version = "1.30", features = [
     "rt",
     "macros",
@@ -62,10 +66,8 @@ tokio = { version = "1.30", features = [
     "io-util",
     "sync",
 ] }
-cfg-if = "1.0.0"
 tracing = "0.1"
 url = "2.5.2"
-const_format = "0.2.33"
 
 # Optional HTTP client. Not needed if you supply your own.
 reqwest = { version = "0.13", default-features = false, features = [
@@ -77,10 +79,10 @@ assert_matches = "1.5"
 axum = "0.8"
 color-eyre = "0.6"
 rstest = { version = "0.26", default-features = false }
+serial_test = "3.2.0"
+tokio = { version = "1", features = ["rt-multi-thread"] }
 tower-http = { version = "0.6", features = ["fs"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio = { version = "1", features = ["rt-multi-thread"] }
-serial_test = "3.2.0"
 
 [[example]]
 name = "tokio_async"
