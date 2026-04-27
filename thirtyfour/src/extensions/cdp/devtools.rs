@@ -2,7 +2,7 @@ use super::ChromeCommand;
 use super::NetworkConditions;
 use crate::error::WebDriverResult;
 use crate::session::handle::SessionHandle;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// The ChromeDevTools struct allows you to interact with Chromium-based browsers via

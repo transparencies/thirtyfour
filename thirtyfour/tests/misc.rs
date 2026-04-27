@@ -2,7 +2,7 @@
 use std::time::Duration;
 
 use rstest::rstest;
-use thirtyfour::{prelude::*, support::block_on, SameSite};
+use thirtyfour::{SameSite, prelude::*, support::block_on};
 
 use crate::common::*;
 

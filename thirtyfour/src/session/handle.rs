@@ -18,11 +18,11 @@ use crate::prelude::WebDriverError;
 use crate::session::scriptret::ScriptRet;
 use crate::support::base64_decode;
 use crate::web_driver::AlreadyQuit;
-use crate::{support, By, OptionRect, Rect, SessionId, SwitchTo, WebDriverStatus, WebElement};
+use crate::{By, OptionRect, Rect, SessionId, SwitchTo, WebDriverStatus, WebElement, support};
 use crate::{IntoArcStr, IntoUrl};
 use crate::{TimeoutConfiguration, WindowHandle};
 
-use super::http::{run_webdriver_cmd, CmdResponse, HttpClient};
+use super::http::{CmdResponse, HttpClient, run_webdriver_cmd};
 
 /// The SessionHandle contains a shared reference to the HTTP client
 /// to allow sending commands to the underlying WebDriver.

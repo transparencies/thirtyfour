@@ -1,5 +1,5 @@
 use crate::error::WebDriverResult;
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use std::convert::Infallible;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -120,9 +120,7 @@ where
                 }
             }
         }};
-        ($future: expr) => {{
-            spawn_off!($future, tokio::runtime::Handle::try_current())
-        }};
+        ($future: expr) => {{ spawn_off!($future, tokio::runtime::Handle::try_current()) }};
     }
 
     cfg_if::cfg_if! {

@@ -1,7 +1,7 @@
 use http::Method;
 use serde_json::json;
 
-use crate::{common::command::FormatRequestData, RequestData};
+use crate::{RequestData, common::command::FormatRequestData};
 
 /// Extra commands specific to Firefox.
 #[derive(Debug)]

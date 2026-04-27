@@ -70,9 +70,9 @@ fn new_window_switch(test_harness: TestHarness) -> WebDriverResult<()> {
 
         let window_3 = c.window().await?;
         assert_ne!(
-        window_3, window_2,
-        "After switching to a new window, the window handle returned from window() should differ now."
-    );
+            window_3, window_2,
+            "After switching to a new window, the window handle returned from window() should differ now."
+        );
 
         c.close_window().await
     })
@@ -101,9 +101,9 @@ fn new_tab_switch(test_harness: TestHarness) -> WebDriverResult<()> {
 
         let window_3 = c.window().await?;
         assert_ne!(
-        window_3, window_2,
-        "After switching to a new window, the window handle returned from window() should differ now."
-    );
+            window_3, window_2,
+            "After switching to a new window, the window handle returned from window() should differ now."
+        );
 
         c.close_window().await
     })

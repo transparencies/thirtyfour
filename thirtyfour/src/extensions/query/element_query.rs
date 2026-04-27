@@ -1,9 +1,9 @@
 use super::conditions::{collect_arg_slice, handle_errors, negate};
-use super::{conditions, ElementPollerNoWait, ElementPollerWithTimeout, IntoElementPoller};
+use super::{ElementPollerNoWait, ElementPollerWithTimeout, IntoElementPoller, conditions};
+use crate::IntoArcStr;
 use crate::error::{WebDriverError, WebDriverErrorInner};
 use crate::prelude::WebDriverResult;
 use crate::session::handle::SessionHandle;
-use crate::IntoArcStr;
 use crate::{By, DynElementPredicate, ElementPredicate, WebElement};
 use indexmap::IndexMap;
 use std::borrow::Cow;
@@ -129,9 +129,10 @@ pub enum ElementQuerySource {
 }
 
 /// Options for wait characteristics for an element query.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ElementQueryWaitOptions {
     /// Use the default poller.
+    #[default]
     WaitDefault,
     /// Use a poller with the specified timeout and interval.
     Wait {
@@ -142,12 +143,6 @@ pub enum ElementQueryWaitOptions {
     },
     /// Do not wait. This uses a poller that quits immediately.
     NoWait,
-}
-
-impl Default for ElementQueryWaitOptions {
-    fn default() -> Self {
-        Self::WaitDefault
-    }
 }
 
 /// All options applicable to an ElementQuery.

@@ -1,9 +1,9 @@
 use pastey::paste;
 use serde::{Deserialize, Serialize};
-use serde_json::{from_value, json, to_value, Value};
+use serde_json::{Value, from_value, json, to_value};
 
-use crate::error::WebDriverResult;
 use crate::CapabilitiesHelper;
+use crate::error::WebDriverResult;
 use crate::{BrowserCapabilitiesHelper, Capabilities};
 
 /// Capabilities for Firefox.

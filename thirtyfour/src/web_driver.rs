@@ -1,15 +1,15 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use crate::Capabilities;
 use crate::common::config::WebDriverConfig;
 use crate::error::WebDriverResult;
 use crate::prelude::WebDriverError;
 use crate::session::create::start_session;
 use crate::session::handle::SessionHandle;
+use crate::session::http::HttpClient;
 #[cfg(feature = "reqwest")]
 use crate::session::http::create_reqwest_client;
-use crate::session::http::HttpClient;
-use crate::Capabilities;
 
 /// The `WebDriver` struct encapsulates an async Selenium WebDriver browser
 /// session.

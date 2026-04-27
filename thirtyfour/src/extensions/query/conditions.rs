@@ -1,5 +1,5 @@
-use crate::error::WebDriverResult;
 use crate::IntoArcStr;
+use crate::error::WebDriverResult;
 use crate::{ElementPredicate, WebElement};
 use std::sync::Arc;
 use stringmatch::Needle;
