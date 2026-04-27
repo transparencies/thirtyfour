@@ -8,7 +8,7 @@ To use the `thirtyfour` crate in your Rust project, you need to add it as a depe
 To automate a web browser, `thirtyfour` needs to communicate with a webdriver server. You will need
 to download the appropriate webdriver server for your browser.
 
-* For Chrome, download [chromedriver](https://sites.google.com/a/chromium.org/chromedriver/downloads)
+* For Chrome, download [chromedriver](https://developer.chrome.com/docs/chromedriver/downloads)
 * For Firefox, download [geckodriver](https://github.com/mozilla/geckodriver/releases)
 
 The webdriver may be zipped. Unzip it and place the webdriver binary somewhere in your `PATH`.
