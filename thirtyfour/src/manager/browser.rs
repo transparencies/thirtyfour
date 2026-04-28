@@ -194,27 +194,56 @@ fn run_version(path: &str, browser: BrowserKind) -> Option<String> {
         return None;
     }
 
-    // On Windows, Firefox doesn't flush its --version output cleanly without `| more`.
+    // Firefox on Windows famously doesn't print --version reliably (it
+    // sometimes detaches and prints nothing to stdout). Read the file's PE
+    // VersionInfo via PowerShell instead — equivalent to what selenium-manager
+    // does via the registry, but works for any install path.
     #[cfg(target_os = "windows")]
-    let output = if matches!(browser, BrowserKind::Firefox) {
-        let cmd = format!("\"{path}\" --version | more");
-        Command::new("cmd").args(["/C", &cmd]).output().ok()?
-    } else {
-        Command::new(path).arg("--version").output().ok()?
-    };
-
+    if matches!(browser, BrowserKind::Firefox) {
+        return read_pe_version(path);
+    }
     #[cfg(not(target_os = "windows"))]
-    let output = {
-        let _ = browser;
-        Command::new(path).arg("--version").output().ok()?
-    };
+    let _ = browser;
 
+    let output = Command::new(path).arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
     }
+    parse_version(&String::from_utf8_lossy(&output.stdout))
+}
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_version(&stdout)
+/// Read a Windows executable's `ProductVersion` from its PE VersionInfo
+/// resource. Cheap and reliable — it doesn't depend on the binary running, so
+/// it sidesteps any `--version` flushing quirks (specifically Firefox).
+#[cfg(target_os = "windows")]
+fn read_pe_version(path: &str) -> Option<String> {
+    // PowerShell's Get-Item needs an absolute path. Resolve via `where` if
+    // the input is a bare command name like `firefox.exe`.
+    let abs = if Path::new(path).is_absolute() {
+        path.to_string()
+    } else {
+        let out = Command::new("where").arg(path).output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .next()?
+            .trim()
+            .to_string()
+    };
+    // Escape single quotes for PowerShell's single-quoted string literal.
+    let escaped = abs.replace('\'', "''");
+    let script =
+        format!("(Get-Item -LiteralPath '{escaped}').VersionInfo.ProductVersion");
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_version(&String::from_utf8_lossy(&output.stdout))
 }
 
 fn exists_or_in_path(path: &str) -> bool {
