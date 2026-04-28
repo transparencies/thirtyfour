@@ -138,9 +138,9 @@ fn candidate_paths(browser: BrowserKind) -> Vec<String> {
                 "/Applications/Firefox.app/Contents/MacOS/firefox".to_string(),
                 "firefox".to_string(),
             ],
-            BrowserKind::Edge => vec![
-                "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge".to_string(),
-            ],
+            BrowserKind::Edge => {
+                vec!["/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge".to_string()]
+            }
             BrowserKind::Safari => Vec::new(),
         }
     }
@@ -154,10 +154,9 @@ fn candidate_paths(browser: BrowserKind) -> Vec<String> {
                 "chromium-browser".to_string(),
             ],
             BrowserKind::Firefox => vec!["firefox".to_string(), "firefox-esr".to_string()],
-            BrowserKind::Edge => vec![
-                "microsoft-edge".to_string(),
-                "microsoft-edge-stable".to_string(),
-            ],
+            BrowserKind::Edge => {
+                vec!["microsoft-edge".to_string(), "microsoft-edge-stable".to_string()]
+            }
             BrowserKind::Safari => Vec::new(),
         }
     }
@@ -226,16 +225,11 @@ fn read_pe_version(path: &str) -> Option<String> {
         if !out.status.success() {
             return None;
         }
-        String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .next()?
-            .trim()
-            .to_string()
+        String::from_utf8_lossy(&out.stdout).lines().next()?.trim().to_string()
     };
     // Escape single quotes for PowerShell's single-quoted string literal.
     let escaped = abs.replace('\'', "''");
-    let script =
-        format!("(Get-Item -LiteralPath '{escaped}').VersionInfo.ProductVersion");
+    let script = format!("(Get-Item -LiteralPath '{escaped}').VersionInfo.ProductVersion");
     let output = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .output()
@@ -303,10 +297,7 @@ mod tests {
 
     #[test]
     fn parse_firefox_version() {
-        assert_eq!(
-            parse_version("Mozilla Firefox 128.0.2").as_deref(),
-            Some("128.0.2")
-        );
+        assert_eq!(parse_version("Mozilla Firefox 128.0.2").as_deref(), Some("128.0.2"));
     }
 
     #[test]
@@ -378,10 +369,7 @@ mod tests {
     fn binary_from_caps_edge() {
         let mut caps = Capabilities::new();
         caps.insert("ms:edgeOptions".into(), json!({"binary": "/path/to/msedge"}));
-        assert_eq!(
-            BrowserKind::Edge.binary_from_caps(&caps).as_deref(),
-            Some("/path/to/msedge")
-        );
+        assert_eq!(BrowserKind::Edge.binary_from_caps(&caps).as_deref(), Some("/path/to/msedge"));
     }
 
     #[test]
@@ -396,23 +384,14 @@ mod tests {
     #[test]
     fn binary_from_caps_chrome() {
         let mut caps = Capabilities::new();
-        caps.insert(
-            "goog:chromeOptions".into(),
-            json!({"binary": "/path/to/chrome"}),
-        );
-        assert_eq!(
-            BrowserKind::Chrome.binary_from_caps(&caps).as_deref(),
-            Some("/path/to/chrome")
-        );
+        caps.insert("goog:chromeOptions".into(), json!({"binary": "/path/to/chrome"}));
+        assert_eq!(BrowserKind::Chrome.binary_from_caps(&caps).as_deref(), Some("/path/to/chrome"));
     }
 
     #[test]
     fn binary_from_caps_firefox() {
         let mut caps = Capabilities::new();
-        caps.insert(
-            "moz:firefoxOptions".into(),
-            json!({"binary": "/path/to/firefox"}),
-        );
+        caps.insert("moz:firefoxOptions".into(), json!({"binary": "/path/to/firefox"}));
         assert_eq!(
             BrowserKind::Firefox.binary_from_caps(&caps).as_deref(),
             Some("/path/to/firefox")

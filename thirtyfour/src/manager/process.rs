@@ -173,10 +173,8 @@ async fn spawn_at_port(
 fn pick_port(host: IpAddr) -> Result<u16, ManagerError> {
     let listener = TcpListener::bind(SocketAddr::new(host, 0))
         .map_err(|e| ManagerError::Spawn(format!("bind ephemeral port: {e}")))?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| ManagerError::Spawn(format!("local_addr: {e}")))?
-        .port();
+    let port =
+        listener.local_addr().map_err(|e| ManagerError::Spawn(format!("local_addr: {e}")))?.port();
     drop(listener);
     Ok(port)
 }
@@ -205,11 +203,7 @@ where
     });
 }
 
-async fn wait_until_ready(
-    host: IpAddr,
-    port: u16,
-    timeout: Duration,
-) -> Result<(), ManagerError> {
+async fn wait_until_ready(host: IpAddr, port: u16, timeout: Duration) -> Result<(), ManagerError> {
     let url = format!("http://{host}:{port}/status");
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))

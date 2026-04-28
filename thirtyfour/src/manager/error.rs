@@ -33,7 +33,9 @@ pub enum ManagerError {
     MissingBrowserName,
 
     /// `browserVersion` was missing from capabilities and `DriverVersion::FromCapabilities` was used.
-    #[error("browserVersion missing from capabilities; required by DriverVersion::FromCapabilities")]
+    #[error(
+        "browserVersion missing from capabilities; required by DriverVersion::FromCapabilities"
+    )]
     MissingCapabilityVersion,
 
     /// A `WebDriverManagerBuilder` was awaited without capabilities preloaded.

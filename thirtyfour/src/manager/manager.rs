@@ -32,10 +32,7 @@ const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(30);
 /// Default cache directory: `<cache_dir>/thirtyfour/drivers`, falling back to the
 /// system temp dir if no cache dir is available.
 fn default_cache_dir() -> PathBuf {
-    dirs::cache_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("thirtyfour")
-        .join("drivers")
+    dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("thirtyfour").join("drivers")
 }
 
 /// Process-wide default manager.
@@ -312,10 +309,7 @@ impl WebDriverManager {
         capabilities: impl Into<Capabilities>,
     ) -> WebDriverResult<WebDriver> {
         let caps: Capabilities = capabilities.into();
-        let driver = self
-            .ensure_driver(&caps)
-            .await
-            .map_err(WebDriverError::from)?;
+        let driver = self.ensure_driver(&caps).await.map_err(WebDriverError::from)?;
         let server_url: Url = driver
             .url()
             .parse()
@@ -333,7 +327,9 @@ impl WebDriverManager {
             config,
             Some(guard),
         )?;
-        Ok(WebDriver { handle: Arc::new(handle) })
+        Ok(WebDriver {
+            handle: Arc::new(handle),
+        })
     }
 
     /// Ensure a driver is running and return an `Arc<ManagedDriverProcess>`
@@ -385,13 +381,8 @@ impl WebDriverManager {
             }
         }
 
-        let driver_path = ensure_driver(
-            &self.download_client,
-            &download_cfg,
-            browser,
-            &resolved,
-        )
-        .await?;
+        let driver_path =
+            ensure_driver(&self.download_client, &download_cfg, browser, &resolved).await?;
         let process = ManagedDriverProcess::spawn(
             &driver_path.binary,
             browser,
@@ -413,4 +404,3 @@ impl WebDriverManager {
         Ok(arc)
     }
 }
-

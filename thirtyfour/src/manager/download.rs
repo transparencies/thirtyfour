@@ -73,11 +73,11 @@ pub(crate) async fn resolve_version(
     }
 
     let resolve_firefox_for_browser_version = |fx: &str| -> Result<String, ManagerError> {
-        geckodriver_for_firefox(fx)
-            .map(str::to_owned)
-            .ok_or_else(|| ManagerError::Parse(format!(
+        geckodriver_for_firefox(fx).map(str::to_owned).ok_or_else(|| {
+            ManagerError::Parse(format!(
                 "no geckodriver release in compatibility table covers Firefox {fx}"
-            )))
+            ))
+        })
     };
 
     match spec {
@@ -140,14 +140,46 @@ struct GeckodriverRelease {
 ///
 /// [upstream]: https://github.com/SeleniumHQ/selenium/blob/trunk/common/geckodriver/geckodriver-support.json
 const GECKODRIVER_RELEASES: &[GeckodriverRelease] = &[
-    GeckodriverRelease { version: "0.36.0", min_firefox: 128, max_firefox: None },
-    GeckodriverRelease { version: "0.35.0", min_firefox: 115, max_firefox: None },
-    GeckodriverRelease { version: "0.34.0", min_firefox: 115, max_firefox: None },
-    GeckodriverRelease { version: "0.33.0", min_firefox: 102, max_firefox: Some(120) },
-    GeckodriverRelease { version: "0.32.2", min_firefox: 102, max_firefox: Some(120) },
-    GeckodriverRelease { version: "0.31.0", min_firefox: 91,  max_firefox: Some(120) },
-    GeckodriverRelease { version: "0.30.0", min_firefox: 78,  max_firefox: Some(90) },
-    GeckodriverRelease { version: "0.29.1", min_firefox: 60,  max_firefox: Some(90) },
+    GeckodriverRelease {
+        version: "0.36.0",
+        min_firefox: 128,
+        max_firefox: None,
+    },
+    GeckodriverRelease {
+        version: "0.35.0",
+        min_firefox: 115,
+        max_firefox: None,
+    },
+    GeckodriverRelease {
+        version: "0.34.0",
+        min_firefox: 115,
+        max_firefox: None,
+    },
+    GeckodriverRelease {
+        version: "0.33.0",
+        min_firefox: 102,
+        max_firefox: Some(120),
+    },
+    GeckodriverRelease {
+        version: "0.32.2",
+        min_firefox: 102,
+        max_firefox: Some(120),
+    },
+    GeckodriverRelease {
+        version: "0.31.0",
+        min_firefox: 91,
+        max_firefox: Some(120),
+    },
+    GeckodriverRelease {
+        version: "0.30.0",
+        min_firefox: 78,
+        max_firefox: Some(90),
+    },
+    GeckodriverRelease {
+        version: "0.29.1",
+        min_firefox: 60,
+        max_firefox: Some(90),
+    },
 ];
 
 /// Pick the best geckodriver release for the given Firefox version. Returns
@@ -155,16 +187,10 @@ const GECKODRIVER_RELEASES: &[GeckodriverRelease] = &[
 /// covers `firefox_version`. Returns `None` when no entry matches (e.g.
 /// Firefox is older than anything in the table).
 fn geckodriver_for_firefox(firefox_version: &str) -> Option<&'static str> {
-    let major: u32 = firefox_version
-        .split('.')
-        .next()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+    let major: u32 = firefox_version.split('.').next().and_then(|s| s.parse().ok()).unwrap_or(0);
     GECKODRIVER_RELEASES
         .iter()
-        .find(|r| {
-            major >= r.min_firefox && r.max_firefox.map_or(true, |max| major <= max)
-        })
+        .find(|r| major >= r.min_firefox && r.max_firefox.map_or(true, |max| major <= max))
         .map(|r| r.version)
 }
 
@@ -200,12 +226,7 @@ async fn fetch_chrome_index(
         .chrome_metadata
         .join("chrome-for-testing/known-good-versions-with-downloads.json")
         .map_err(|e| ManagerError::Parse(e.to_string()))?;
-    let resp = client
-        .get(url)
-        .timeout(cfg.download_timeout)
-        .send()
-        .await?
-        .error_for_status()?;
+    let resp = client.get(url).timeout(cfg.download_timeout).send().await?.error_for_status()?;
     let body: ChromeKnownGoodVersions = resp.json().await?;
     Ok(body)
 }
@@ -219,12 +240,7 @@ async fn fetch_chrome_latest(
         .chrome_metadata
         .join("chrome-for-testing/LATEST_RELEASE_STABLE")
         .map_err(|e| ManagerError::Parse(e.to_string()))?;
-    let resp = client
-        .get(url)
-        .timeout(cfg.download_timeout)
-        .send()
-        .await?
-        .error_for_status()?;
+    let resp = client.get(url).timeout(cfg.download_timeout).send().await?.error_for_status()?;
     Ok(resp.text().await?.trim().to_string())
 }
 
@@ -242,11 +258,8 @@ async fn resolve_chrome_exact(
         }
     }
     let m = major(version);
-    let mut matches: Vec<&ChromeVersionEntry> = index
-        .versions
-        .iter()
-        .filter(|v| major(&v.version) == m)
-        .collect();
+    let mut matches: Vec<&ChromeVersionEntry> =
+        index.versions.iter().filter(|v| major(&v.version) == m).collect();
     matches.sort_by(|a, b| sort_semver(&a.version, &b.version));
     matches
         .last()
@@ -255,11 +268,8 @@ async fn resolve_chrome_exact(
 }
 
 fn sort_semver(a: &str, b: &str) -> std::cmp::Ordering {
-    let parse = |s: &str| -> Vec<u32> {
-        s.split('.')
-            .map(|p| p.parse::<u32>().unwrap_or(0))
-            .collect()
-    };
+    let parse =
+        |s: &str| -> Vec<u32> { s.split('.').map(|p| p.parse::<u32>().unwrap_or(0)).collect() };
     parse(a).cmp(&parse(b))
 }
 
@@ -270,10 +280,7 @@ fn sort_semver(a: &str, b: &str) -> std::cmp::Ordering {
 /// call to discover newer versions. Users who need a specific newer release
 /// should use [`DriverVersion::Exact`].
 fn firefox_latest_from_table() -> &'static str {
-    GECKODRIVER_RELEASES
-        .first()
-        .expect("GECKODRIVER_RELEASES must not be empty")
-        .version
+    GECKODRIVER_RELEASES.first().expect("GECKODRIVER_RELEASES must not be empty").version
 }
 
 async fn fetch_edge_latest(
@@ -311,11 +318,7 @@ async fn resolve_edge_exact(
         .edge_downloads
         .join(&format!("LATEST_RELEASE_{version}"))
         .map_err(|e| ManagerError::Parse(e.to_string()))?;
-    let resp = client
-        .get(url)
-        .timeout(cfg.download_timeout)
-        .send()
-        .await?;
+    let resp = client.get(url).timeout(cfg.download_timeout).send().await?;
     if !resp.status().is_success() {
         // Fall back to latest stable rather than error — best-effort resolution.
         return fetch_edge_latest(client, cfg).await;
@@ -329,10 +332,8 @@ async fn resolve_edge_exact(
 /// back to UTF-8 if no BOM is present.
 fn decode_edge_text(bytes: &[u8]) -> String {
     if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
-        let utf16: Vec<u16> = bytes[2..]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
+        let utf16: Vec<u16> =
+            bytes[2..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
         String::from_utf16_lossy(&utf16)
     } else {
         String::from_utf8_lossy(bytes).into_owned()
@@ -377,16 +378,14 @@ pub(crate) async fn ensure_driver(
         BrowserKind::Edge => edge_platform(),
         BrowserKind::Safari => unreachable!("safari short-circuited above"),
     };
-    let dir = cfg
-        .cache_dir
-        .join(browser.cache_dir_name())
-        .join(version)
-        .join(platform);
+    let dir = cfg.cache_dir.join(browser.cache_dir_name()).join(version).join(platform);
     let bin_name = exe_name(browser);
     let bin_path = dir.join(&bin_name);
 
     if bin_path.exists() {
-        return Ok(DriverPath { binary: bin_path });
+        return Ok(DriverPath {
+            binary: bin_path,
+        });
     }
 
     if cfg.offline {
@@ -394,9 +393,7 @@ pub(crate) async fn ensure_driver(
     }
 
     tokio::fs::create_dir_all(&dir).await?;
-    let lock_path = cfg
-        .cache_dir
-        .join(format!("{}-{}.lock", browser.cache_dir_name(), version));
+    let lock_path = cfg.cache_dir.join(format!("{}-{}.lock", browser.cache_dir_name(), version));
     if let Some(parent) = lock_path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
@@ -417,7 +414,9 @@ pub(crate) async fn ensure_driver(
 
     // Re-check after acquiring the lock — another process may have downloaded.
     if bin_path.exists() {
-        return Ok(DriverPath { binary: bin_path });
+        return Ok(DriverPath {
+            binary: bin_path,
+        });
     }
 
     download_and_extract(client, cfg, browser, version, &dir).await?;
@@ -431,7 +430,9 @@ pub(crate) async fn ensure_driver(
         tokio::fs::set_permissions(&bin_path, perms).await?;
     }
 
-    Ok(DriverPath { binary: bin_path })
+    Ok(DriverPath {
+        binary: bin_path,
+    })
 }
 
 /// Locate the system-installed `safaridriver`. Currently only macOS ships one.
@@ -440,7 +441,9 @@ fn safari_driver_path() -> Result<DriverPath, ManagerError> {
     {
         let p = Path::new("/usr/bin/safaridriver");
         if p.exists() {
-            return Ok(DriverPath { binary: p.to_path_buf() });
+            return Ok(DriverPath {
+                binary: p.to_path_buf(),
+            });
         }
         Err(ManagerError::LocalBrowserNotFound {
             browser: "Safari",
@@ -449,9 +452,7 @@ fn safari_driver_path() -> Result<DriverPath, ManagerError> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        Err(ManagerError::UnsupportedBrowser(
-            "safari (only available on macOS)".to_string(),
-        ))
+        Err(ManagerError::UnsupportedBrowser("safari (only available on macOS)".to_string()))
     }
 }
 
@@ -512,20 +513,12 @@ async fn download_chromedriver(
     target_dir: &Path,
 ) -> Result<(), ManagerError> {
     let index = fetch_chrome_index(client, cfg).await?;
-    let entry = index
-        .versions
-        .iter()
-        .find(|v| v.version == version)
-        .ok_or_else(|| {
-            ManagerError::Parse(format!("chromedriver version {version} not in CfT index"))
-        })?;
+    let entry = index.versions.iter().find(|v| v.version == version).ok_or_else(|| {
+        ManagerError::Parse(format!("chromedriver version {version} not in CfT index"))
+    })?;
     let platform = chrome_platform();
-    let download = entry
-        .downloads
-        .chromedriver
-        .iter()
-        .find(|d| d.platform == platform)
-        .ok_or_else(|| {
+    let download =
+        entry.downloads.chromedriver.iter().find(|d| d.platform == platform).ok_or_else(|| {
             ManagerError::Parse(format!(
                 "chromedriver {version} has no download for platform {platform}"
             ))
@@ -549,19 +542,14 @@ pub(crate) fn extract_zip(
     browser: BrowserKind,
 ) -> Result<(), ManagerError> {
     let cursor = std::io::Cursor::new(bytes);
-    let mut zip =
-        zip::ZipArchive::new(cursor).map_err(|e| ManagerError::Extract(e.to_string()))?;
+    let mut zip = zip::ZipArchive::new(cursor).map_err(|e| ManagerError::Extract(e.to_string()))?;
     let exe = exe_name(browser);
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| ManagerError::Extract(e.to_string()))?;
         let entry_name = entry.name().to_string();
-        let basename = Path::new(&entry_name)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let basename = Path::new(&entry_name).file_name().and_then(|s| s.to_str()).unwrap_or("");
         if basename == exe {
-            let mut out =
-                std::fs::File::create(target_dir.join(&exe)).map_err(ManagerError::Io)?;
+            let mut out = std::fs::File::create(target_dir.join(&exe)).map_err(ManagerError::Io)?;
             std::io::copy(&mut entry, &mut out)
                 .map_err(|e| ManagerError::Extract(e.to_string()))?;
             return Ok(());
@@ -632,28 +620,17 @@ fn extract_geckodriver_tar_gz(bytes: &[u8], target_dir: &Path) -> Result<(), Man
     let gz = flate2::read::GzDecoder::new(std::io::Cursor::new(bytes));
     let mut archive = tar::Archive::new(gz);
     let exe = exe_name(BrowserKind::Firefox);
-    for entry in archive
-        .entries()
-        .map_err(|e| ManagerError::Extract(e.to_string()))?
-    {
+    for entry in archive.entries().map_err(|e| ManagerError::Extract(e.to_string()))? {
         let mut entry = entry.map_err(|e| ManagerError::Extract(e.to_string()))?;
         let path = entry.path().map_err(|e| ManagerError::Extract(e.to_string()))?;
-        let basename = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
+        let basename = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
         if basename == exe {
             let out_path = target_dir.join(&exe);
-            entry
-                .unpack(&out_path)
-                .map_err(|e| ManagerError::Extract(e.to_string()))?;
+            entry.unpack(&out_path).map_err(|e| ManagerError::Extract(e.to_string()))?;
             return Ok(());
         }
     }
-    Err(ManagerError::Extract(format!(
-        "{exe} not found inside geckodriver archive"
-    )))
+    Err(ManagerError::Extract(format!("{exe} not found inside geckodriver archive")))
 }
 
 /// CfT platform string. Falls back to Linux 64-bit on unknown targets — best
@@ -704,14 +681,8 @@ mod tests {
 
     #[test]
     fn semver_sort() {
-        assert_eq!(
-            sort_semver("126.0.6478.10", "126.0.6478.126"),
-            std::cmp::Ordering::Less
-        );
-        assert_eq!(
-            sort_semver("127.0.0.0", "126.99.99.99"),
-            std::cmp::Ordering::Greater
-        );
+        assert_eq!(sort_semver("126.0.6478.10", "126.0.6478.126"), std::cmp::Ordering::Less);
+        assert_eq!(sort_semver("127.0.0.0", "126.99.99.99"), std::cmp::Ordering::Greater);
     }
 
     #[test]

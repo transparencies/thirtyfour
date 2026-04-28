@@ -30,10 +30,10 @@
 mod browser;
 mod download;
 mod error;
-mod process;
-mod version;
 #[allow(clippy::module_inception)]
 mod manager;
+mod process;
+mod version;
 
 #[cfg(test)]
 mod tests;

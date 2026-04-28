@@ -157,16 +157,9 @@ async fn resolve_version_latest_chrome() {
     };
 
     let client = reqwest::Client::new();
-    let v = resolve_version(
-        &client,
-        &cfg,
-        BrowserKind::Chrome,
-        &DriverVersion::Latest,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let v = resolve_version(&client, &cfg, BrowserKind::Chrome, &DriverVersion::Latest, None, None)
+        .await
+        .unwrap();
     assert_eq!(v, "126.0.6478.126");
 }
 
