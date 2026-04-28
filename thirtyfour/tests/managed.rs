@@ -10,11 +10,37 @@
 
 #![cfg(feature = "manager-tests")]
 
+use std::future::Future;
 use std::time::Duration;
 
 use thirtyfour::manager::WebDriverManager;
 use thirtyfour::prelude::*;
 use thirtyfour::{ChromeCapabilities, EdgeCapabilities, FirefoxCapabilities};
+
+/// Per-test wall-clock budget. Real driver downloads on slow CI runners are
+/// usually well under a minute; this is a defensive ceiling so a hung test
+/// fails-fast rather than burning the runner's full 6h limit.
+const TEST_TIMEOUT: Duration = Duration::from_secs(180);
+
+/// Run `f` with a hard timeout. Returns an error rather than hanging.
+async fn with_timeout<F, T>(f: F) -> WebDriverResult<T>
+where
+    F: Future<Output = WebDriverResult<T>>,
+{
+    tokio::time::timeout(TEST_TIMEOUT, f).await.unwrap_or_else(|_| {
+        Err(WebDriverError::FatalError(format!("test exceeded {}s budget", TEST_TIMEOUT.as_secs())))
+    })
+}
+
+/// Chromium-based browsers (Chrome, Edge) running headless on Windows runners
+/// have known reliability issues with `goto`, even for `about:blank` — see
+/// `managed_edge_smoke`'s comment on the same bug for Linux Edge. The
+/// manager's job is done by the time we'd call `goto`; navigation is the
+/// browser engine's responsibility, not ours, so we skip it on the affected
+/// platform.
+fn skip_navigation() -> bool {
+    cfg!(target_os = "windows")
+}
 
 fn chrome_caps() -> ChromeCapabilities {
     let mut caps = DesiredCapabilities::chrome();
@@ -45,18 +71,26 @@ fn edge_caps() -> EdgeCapabilities {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_chrome_smoke() -> WebDriverResult<()> {
-    let driver = WebDriver::managed(chrome_caps()).await?;
-    driver.goto("about:blank").await?;
-    driver.quit().await?;
-    Ok(())
+    with_timeout(async {
+        let driver = WebDriver::managed(chrome_caps()).await?;
+        if !skip_navigation() {
+            driver.goto("about:blank").await?;
+        }
+        driver.quit().await?;
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_firefox_smoke() -> WebDriverResult<()> {
-    let driver = WebDriver::managed(firefox_caps()).await?;
-    driver.goto("about:blank").await?;
-    driver.quit().await?;
-    Ok(())
+    with_timeout(async {
+        let driver = WebDriver::managed(firefox_caps()).await?;
+        driver.goto("about:blank").await?;
+        driver.quit().await?;
+        Ok(())
+    })
+    .await
 }
 
 /// Edge headless on Ubuntu has a known issue where the renderer times out
@@ -68,9 +102,12 @@ async fn managed_firefox_smoke() -> WebDriverResult<()> {
 /// existing chrome/firefox smokes.
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_edge_smoke() -> WebDriverResult<()> {
-    let driver = WebDriver::managed(edge_caps()).await?;
-    driver.quit().await?;
-    Ok(())
+    with_timeout(async {
+        let driver = WebDriver::managed(edge_caps()).await?;
+        driver.quit().await?;
+        Ok(())
+    })
+    .await
 }
 
 /// Safari is macOS-only and uses the system `safaridriver`. The CI runner must
@@ -78,12 +115,15 @@ async fn managed_edge_smoke() -> WebDriverResult<()> {
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_safari_smoke() -> WebDriverResult<()> {
-    let mut caps = DesiredCapabilities::safari();
-    let _ = &mut caps; // safari has no headless / no sandbox toggles
-    let driver = WebDriver::managed(caps).await?;
-    driver.goto("about:blank").await?;
-    driver.quit().await?;
-    Ok(())
+    with_timeout(async {
+        let mut caps = DesiredCapabilities::safari();
+        let _ = &mut caps; // safari has no headless / no sandbox toggles
+        let driver = WebDriver::managed(caps).await?;
+        driver.goto("about:blank").await?;
+        driver.quit().await?;
+        Ok(())
+    })
+    .await
 }
 
 /// Exercises a few non-default options on Chrome:
@@ -98,29 +138,34 @@ async fn managed_safari_smoke() -> WebDriverResult<()> {
 /// itself is covered by the wiremock-based unit tests.
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_chrome_options_and_dedup() -> WebDriverResult<()> {
-    let cache = tempfile::tempdir().expect("tempdir");
-    let mgr = WebDriverManager::builder()
-        .match_local() // default; explicit for clarity
-        .cache_dir(cache.path().to_path_buf())
-        .ready_timeout(Duration::from_secs(60))
-        .build();
+    with_timeout(async {
+        let cache = tempfile::tempdir().expect("tempdir");
+        let mgr = WebDriverManager::builder()
+            .match_local() // default; explicit for clarity
+            .cache_dir(cache.path().to_path_buf())
+            .ready_timeout(Duration::from_secs(60))
+            .build();
 
-    let d1 = mgr.launch(chrome_caps()).await?;
-    let d2 = mgr.launch(chrome_caps()).await?;
+        let d1 = mgr.launch(chrome_caps()).await?;
+        let d2 = mgr.launch(chrome_caps()).await?;
 
-    // Two `launch()` calls keyed on the same (BrowserKind, version, host)
-    // should reuse a single chromedriver subprocess — both `WebDriver`
-    // instances should point at the same server URL.
-    assert_eq!(
-        d1.handle.server_url(),
-        d2.handle.server_url(),
-        "two managed sessions for the same browser must share a chromedriver process"
-    );
+        // Two `launch()` calls keyed on the same (BrowserKind, version, host)
+        // should reuse a single chromedriver subprocess — both `WebDriver`
+        // instances should point at the same server URL.
+        assert_eq!(
+            d1.handle.server_url(),
+            d2.handle.server_url(),
+            "two managed sessions for the same browser must share a chromedriver process"
+        );
 
-    d1.goto("about:blank").await?;
-    d2.goto("about:blank").await?;
+        if !skip_navigation() {
+            d1.goto("about:blank").await?;
+            d2.goto("about:blank").await?;
+        }
 
-    d1.quit().await?;
-    d2.quit().await?;
-    Ok(())
+        d1.quit().await?;
+        d2.quit().await?;
+        Ok(())
+    })
+    .await
 }
