@@ -12,7 +12,7 @@
 
 use std::time::Duration;
 
-use thirtyfour::manager::{DriverVersion, WebDriverManager};
+use thirtyfour::manager::WebDriverManager;
 use thirtyfour::prelude::*;
 use thirtyfour::{ChromeCapabilities, EdgeCapabilities, FirefoxCapabilities};
 
@@ -81,15 +81,20 @@ async fn managed_safari_smoke() -> WebDriverResult<()> {
 }
 
 /// Exercises a few non-default options on Chrome:
-///   - explicit `WebDriverManager::builder().latest()` instead of `MatchLocalBrowser`
 ///   - a custom cache dir
-///   - two `launch()` calls share a single chromedriver process (refcount + dedup)
 ///   - a custom ready timeout
+///   - two `launch()` calls share a single chromedriver process (refcount + dedup)
+///
+/// We deliberately do NOT exercise `DriverVersion::Latest` here. ChromeDriver's
+/// major version must match Chrome's, and CI runners typically have a Chrome a
+/// few days behind the absolute latest chromedriver release — so a
+/// `Latest`-driven E2E test would be perpetually flaky. The `Latest` resolver
+/// itself is covered by the wiremock-based unit tests.
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_chrome_options_and_dedup() -> WebDriverResult<()> {
     let cache = tempfile::tempdir().expect("tempdir");
     let mgr = WebDriverManager::builder()
-        .version(DriverVersion::Latest)
+        .match_local() // default; explicit for clarity
         .cache_dir(cache.path().to_path_buf())
         .ready_timeout(Duration::from_secs(60))
         .build();
