@@ -57,6 +57,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          # `--nocapture` so the diagnostic eprintln tracepoints surface in
-          # real time (they're captured otherwise and only shown on failure).
-          args: -p thirtyfour --features manager-tests --test managed -- --test-threads=1 --nocapture ${{ matrix.browser }}
+          args: -p thirtyfour --features manager-tests --test managed -- --test-threads=1 ${{ matrix.browser }}

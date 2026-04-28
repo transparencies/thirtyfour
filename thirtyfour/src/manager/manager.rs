@@ -292,22 +292,17 @@ impl WebDriverManager {
         self: &Arc<Self>,
         capabilities: impl Into<Capabilities>,
     ) -> WebDriverResult<WebDriver> {
-        eprintln!("[launch] entered");
         let caps: Capabilities = capabilities.into();
         let driver = self.ensure_driver(&caps).await.map_err(WebDriverError::from)?;
-        eprintln!("[launch] ensure_driver returned");
         let server_url: Url = driver
             .url()
             .parse()
             .map_err(|e| WebDriverError::ParseError(format!("invalid driver url: {e}")))?;
-        eprintln!("[launch] server_url={server_url}");
 
         let config = WebDriverConfig::default();
         let client = create_reqwest_client(config.reqwest_timeout);
         let client_arc: Arc<dyn crate::session::http::HttpClient> = Arc::new(client);
-        eprintln!("[launch] before start_session");
         let session_id = start_session(client_arc.as_ref(), &server_url, &config, caps).await?;
-        eprintln!("[launch] session_id={session_id:?}");
         let guard: Arc<dyn DriverGuard> = driver;
         let handle = SessionHandle::new_with_config_and_guard(
             client_arc,
@@ -316,7 +311,6 @@ impl WebDriverManager {
             config,
             Some(guard),
         )?;
-        eprintln!("[launch] returning WebDriver");
         Ok(WebDriver {
             handle: Arc::new(handle),
         })
@@ -329,17 +323,13 @@ impl WebDriverManager {
         caps: &Capabilities,
     ) -> Result<Arc<ManagedDriverProcess>, ManagerError> {
         let browser = BrowserKind::from_capabilities(caps)?;
-        eprintln!("[ensure_driver] browser={browser:?}");
 
         // For MatchLocalBrowser we probe the binary up front (potentially using a
         // capabilities-supplied path).
         let local = match self.cfg.version {
             DriverVersion::MatchLocalBrowser => {
                 let custom = browser.binary_from_caps(caps);
-                eprintln!("[ensure_driver] detect_local_version (custom={custom:?})");
-                let v = detect_local_version(browser, custom.as_deref())?;
-                eprintln!("[ensure_driver] local_version={v}");
-                Some(v)
+                Some(detect_local_version(browser, custom.as_deref())?)
             }
             _ => None,
         };
@@ -351,7 +341,6 @@ impl WebDriverManager {
             download_timeout: self.cfg.download_timeout,
             offline: self.cfg.offline,
         };
-        eprintln!("[ensure_driver] resolve_version");
         let resolved = resolve_version(
             &self.download_client,
             &download_cfg,
@@ -361,7 +350,6 @@ impl WebDriverManager {
             caps_version,
         )
         .await?;
-        eprintln!("[ensure_driver] resolved={resolved}");
 
         let key = DriverKey {
             browser,
@@ -373,16 +361,12 @@ impl WebDriverManager {
         {
             let map = self.drivers.lock().await;
             if let Some(existing) = map.get(&key).and_then(Weak::upgrade) {
-                eprintln!("[ensure_driver] reusing existing driver");
                 return Ok(existing);
             }
         }
 
-        eprintln!("[ensure_driver] downloading/locating driver binary");
         let driver_path =
             ensure_driver(&self.download_client, &download_cfg, browser, &resolved).await?;
-        eprintln!("[ensure_driver] binary={}", driver_path.binary.display());
-        eprintln!("[ensure_driver] spawning");
         let process = ManagedDriverProcess::spawn(
             &driver_path.binary,
             browser,
@@ -393,7 +377,6 @@ impl WebDriverManager {
             },
         )
         .await?;
-        eprintln!("[ensure_driver] spawn ok port={}", process.port);
 
         let arc = Arc::new(process);
         let mut map = self.drivers.lock().await;
@@ -402,7 +385,6 @@ impl WebDriverManager {
             return Ok(existing);
         }
         map.insert(key, Arc::downgrade(&arc));
-        eprintln!("[ensure_driver] returning new driver Arc");
         Ok(arc)
     }
 }

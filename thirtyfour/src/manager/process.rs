@@ -90,25 +90,17 @@ impl ManagedDriverProcess {
         browser: BrowserKind,
         cfg: &SpawnConfig,
     ) -> Result<Self, ManagerError> {
-        eprintln!("[spawn] entered binary={} browser={browser:?}", binary.display());
         const MAX_PORT_ATTEMPTS: u8 = 3;
         let mut last_err: Option<ManagerError> = None;
         for attempt in 0..MAX_PORT_ATTEMPTS {
             let port = pick_port(cfg.host)?;
-            eprintln!("[spawn] attempt {attempt} at port {port}");
             match spawn_at_port(binary, browser, cfg, port).await {
-                Ok(p) => {
-                    eprintln!("[spawn] returning Ok");
-                    return Ok(p);
-                }
+                Ok(p) => return Ok(p),
                 Err(e) if is_port_in_use(&e) => {
                     debug!("driver port {port} already in use (attempt {attempt}): {e}");
                     last_err = Some(e);
                 }
-                Err(e) => {
-                    eprintln!("[spawn] returning Err: {e}");
-                    return Err(e);
-                }
+                Err(e) => return Err(e),
             }
         }
         Err(last_err.unwrap_or_else(|| ManagerError::Spawn("port allocation exhausted".into())))
@@ -140,7 +132,6 @@ async fn spawn_at_port(
     cfg: &SpawnConfig,
     port: u16,
 ) -> Result<ManagedDriverProcess, ManagerError> {
-    eprintln!("[spawn_at_port] port={port} binary={}", binary.display());
     // chromedriver, geckodriver, msedgedriver, and safaridriver all accept --port=N.
     let mut cmd = Command::new(binary);
     cmd.arg(format!("--port={port}"));
@@ -160,7 +151,6 @@ async fn spawn_at_port(
     let mut child = cmd
         .spawn()
         .map_err(|e| ManagerError::Spawn(format!("spawn {}: {}", binary.display(), e)))?;
-    eprintln!("[spawn_at_port] child spawned (pid={:?})", child.id());
 
     let shutdown = Arc::new(AtomicBool::new(false));
     let mut pump_handles = Vec::new();
@@ -173,16 +163,13 @@ async fn spawn_at_port(
         }
     }
 
-    eprintln!("[spawn_at_port] waiting for /status ready");
     if let Err(e) = wait_until_ready(cfg.host, port, cfg.ready_timeout).await {
-        eprintln!("[spawn_at_port] readiness failed: {e}");
         let _ = child.kill().await;
         for h in &pump_handles {
             h.abort();
         }
         return Err(e);
     }
-    eprintln!("[spawn_at_port] /status ready");
 
     Ok(ManagedDriverProcess {
         host: cfg.host,
@@ -254,31 +241,23 @@ async fn wait_until_ready(host: IpAddr, port: u16, timeout: Duration) -> Result<
 
 impl Drop for ManagedDriverProcess {
     fn drop(&mut self) {
-        eprintln!("[ManagedDriverProcess::drop] entered port={}", self.port);
         self.shutdown.store(true, Ordering::Relaxed);
         // Sync drop, so we can't await. `start_kill` issues SIGKILL (or
         // TerminateProcess on Windows) without blocking; `kill_on_drop(true)`
         // set on the Command ensures the child is reaped asynchronously when
         // the Child handle drops.
-        if let Some(mut child) = self.child.take() {
-            eprintln!("[ManagedDriverProcess::drop] start_kill");
-            if let Err(e) = child.start_kill() {
-                warn!(target: "thirtyfour::manager", error = %e, "failed to kill driver");
-            }
-            eprintln!("[ManagedDriverProcess::drop] dropping Child handle");
-            drop(child);
-            eprintln!("[ManagedDriverProcess::drop] Child dropped");
+        if let Some(mut child) = self.child.take()
+            && let Err(e) = child.start_kill()
+        {
+            warn!(target: "thirtyfour::manager", error = %e, "failed to kill driver");
         }
         // Abort the stdio pump tasks. Without this, on Windows the pumps can
         // remain stuck on `next_line().await` after the child is killed
         // (anonymous pipe semantics don't always surface EOF cleanly), and the
         // multi-thread Tokio runtime drops by waiting for all spawned tasks to
         // finish — blocking process exit indefinitely.
-        let n = self.pump_handles.len();
         for h in self.pump_handles.drain(..) {
             h.abort();
         }
-        eprintln!("[ManagedDriverProcess::drop] aborted {n} pump tasks");
-        eprintln!("[ManagedDriverProcess::drop] returning");
     }
 }
