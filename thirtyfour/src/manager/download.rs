@@ -495,14 +495,7 @@ async fn download_msedgedriver(
         .edge_downloads
         .join(&format!("{version}/edgedriver_{platform}.zip"))
         .map_err(|e| ManagerError::Parse(e.to_string()))?;
-    let bytes = client
-        .get(url)
-        .timeout(cfg.download_timeout)
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
+    let bytes = fetch_bytes_with_retry(client, &url, cfg.download_timeout).await?;
     extract_zip(&bytes, target_dir, BrowserKind::Edge)
 }
 
@@ -523,15 +516,79 @@ async fn download_chromedriver(
                 "chromedriver {version} has no download for platform {platform}"
             ))
         })?;
-    let bytes = client
-        .get(&download.url)
-        .timeout(cfg.download_timeout)
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
+    let url = download
+        .url
+        .parse::<Url>()
+        .map_err(|e| ManagerError::Parse(format!("invalid chromedriver download URL: {e}")))?;
+    let bytes = fetch_bytes_with_retry(client, &url, cfg.download_timeout).await?;
     extract_zip(&bytes, target_dir, BrowserKind::Chrome)
+}
+
+/// GET a URL into bytes, retrying on transient failures (5xx and network
+/// errors). 4xx errors surface immediately — they won't get better with
+/// retrying, and retrying could mask a real misconfiguration. Backoff is
+/// fixed at 1s, 2s, 4s.
+async fn fetch_bytes_with_retry(
+    client: &reqwest::Client,
+    url: &Url,
+    timeout: Duration,
+) -> Result<bytes::Bytes, ManagerError> {
+    const MAX_ATTEMPTS: u32 = 3;
+    let mut last_err: Option<ManagerError> = None;
+    for attempt in 0..MAX_ATTEMPTS {
+        let result: Result<bytes::Bytes, ManagerError> = async {
+            let resp = client
+                .get(url.clone())
+                .header("User-Agent", "thirtyfour-manager")
+                .timeout(timeout)
+                .send()
+                .await?;
+            let status = resp.status();
+            if status.is_client_error() {
+                // 4xx — won't get better with retry; surface immediately.
+                return Err(ManagerError::Http(format!("HTTP {status} for {url}")));
+            }
+            if !status.is_success() {
+                // 5xx — retryable.
+                return Err(ManagerError::Http(format!("HTTP {status} for {url}")));
+            }
+            Ok(resp.bytes().await?)
+        }
+        .await;
+
+        match result {
+            Ok(b) => return Ok(b),
+            Err(e @ ManagerError::Http(_)) if is_transient(&e) => {
+                tracing::debug!(
+                    "download attempt {} for {url} failed (will retry): {e}",
+                    attempt + 1
+                );
+                last_err = Some(e);
+            }
+            Err(e) => return Err(e),
+        }
+
+        if attempt + 1 < MAX_ATTEMPTS {
+            let backoff = Duration::from_secs(1u64 << attempt); // 1s, 2s, 4s
+            tokio::time::sleep(backoff).await;
+        }
+    }
+    Err(last_err.unwrap_or_else(|| ManagerError::Http("retry budget exhausted".into())))
+}
+
+/// `true` if the error message indicates a transient failure (5xx, network
+/// error, timeout). Used to decide whether to retry.
+fn is_transient(err: &ManagerError) -> bool {
+    let ManagerError::Http(msg) = err else {
+        return false;
+    };
+    // 5xx codes cover server / gateway / unavailable.
+    msg.contains("HTTP 5")
+        // reqwest message strings for connect/timeout/connection-closed.
+        || msg.contains("operation timed out")
+        || msg.contains("connection")
+        || msg.contains("dns error")
+        || msg.contains("error sending request")
 }
 
 /// Extract the driver binary for `browser` from a ZIP archive, writing it to
@@ -568,15 +625,7 @@ async fn download_geckodriver(
     target_dir: &Path,
 ) -> Result<(), ManagerError> {
     let url = geckodriver_download_url(cfg, version)?;
-    let bytes = client
-        .get(url)
-        .header("User-Agent", "thirtyfour-manager")
-        .timeout(cfg.download_timeout)
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
+    let bytes = fetch_bytes_with_retry(client, &url, cfg.download_timeout).await?;
     if cfg!(windows) {
         extract_zip(&bytes, target_dir, BrowserKind::Firefox)
     } else {
@@ -785,6 +834,22 @@ mod tests {
         // Sanity: `Latest` for Firefox returns the highest entry, which is the
         // first element of the table.
         assert_eq!(firefox_latest_from_table(), "0.36.0");
+    }
+
+    #[test]
+    fn transient_error_classification() {
+        // 5xx → retry.
+        assert!(is_transient(&ManagerError::Http("HTTP 502 Bad Gateway for ...".into())));
+        assert!(is_transient(&ManagerError::Http("HTTP 503 Service Unavailable".into())));
+        assert!(is_transient(&ManagerError::Http("HTTP 500 Internal Server Error".into())));
+        // Network errors → retry.
+        assert!(is_transient(&ManagerError::Http("error sending request".into())));
+        assert!(is_transient(&ManagerError::Http("operation timed out".into())));
+        // 4xx → don't retry.
+        assert!(!is_transient(&ManagerError::Http("HTTP 404 Not Found".into())));
+        assert!(!is_transient(&ManagerError::Http("HTTP 403 Forbidden".into())));
+        // Non-Http error → don't retry.
+        assert!(!is_transient(&ManagerError::Parse("bad version".into())));
     }
 
     #[test]
