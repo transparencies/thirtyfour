@@ -277,7 +277,7 @@ webdriver_err! {
         UnknownMethod(WebDriverErrorInfo),
         #[error("Unsupport operation: {0}")]
         UnsupportedOperation(WebDriverErrorInfo),
-        #[error("Something caused the session to terminate.")]
+        #[error("Session terminated: {0}")]
         FatalError(String),
         #[error("Failed to receive command: {0}")]
         CommandRecvError(String),
@@ -285,6 +285,13 @@ webdriver_err! {
         CommandSendError(String),
         #[error("Could not create session: {0}")]
         SessionCreateError(String),
+    }
+}
+
+#[cfg(feature = "manager")]
+impl From<crate::manager::ManagerError> for WebDriverError {
+    fn from(e: crate::manager::ManagerError) -> Self {
+        WebDriverError::SessionCreateError(format!("driver manager: {e}"))
     }
 }
 

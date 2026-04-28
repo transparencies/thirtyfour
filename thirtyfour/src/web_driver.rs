@@ -136,6 +136,55 @@ impl WebDriver {
         }
     }
 
+    /// Plug-and-play constructor that auto-downloads the appropriate driver
+    /// (chromedriver / geckodriver), spawns it locally, and tears it down when
+    /// the last connected `WebDriver` is dropped.
+    ///
+    /// Returns a [`WebDriverManagerBuilder`] pre-loaded with `caps`. Awaiting
+    /// the builder constructs the session; chained methods customize the
+    /// version or other settings before the await:
+    ///
+    /// ```no_run
+    /// # use thirtyfour::prelude::*;
+    /// # async fn run() -> WebDriverResult<()> {
+    /// // Default (matches the locally-installed browser).
+    /// let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
+    ///
+    /// // Override the version inline using the same builder shape used by
+    /// // `WebDriverManager::builder()`.
+    /// # let caps = DesiredCapabilities::chrome();
+    /// let driver = WebDriver::managed(caps).latest().await?;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Use [`WebDriverManager::builder`] explicitly when you need a single
+    /// manager to drive multiple browsers in one process.
+    ///
+    /// ## Process sharing across calls
+    ///
+    /// When called with no chained customization, multiple `WebDriver::managed`
+    /// calls in the same process share a single underlying driver subprocess
+    /// (refcount-keyed on `(browser, resolved_version, host)`). The shared
+    /// driver lives only as long as at least one connected `WebDriver` exists.
+    ///
+    /// **Any chained customization** — `.latest()`, `.cache_dir(...)`,
+    /// `.host(...)`, etc. — opts out of sharing and builds a *fresh* manager
+    /// for that call. If you want to share one customized manager across many
+    /// sessions, construct it explicitly via [`WebDriverManager::builder`] and
+    /// call `.launch(caps)` on it for each session.
+    ///
+    /// [`WebDriverManagerBuilder`]: crate::manager::WebDriverManagerBuilder
+    /// [`WebDriverManager::builder`]: crate::manager::WebDriverManager::builder
+    #[cfg(feature = "manager")]
+    pub fn managed<C>(capabilities: C) -> crate::manager::WebDriverManagerBuilder
+    where
+        C: Into<Capabilities>,
+    {
+        let mut builder = crate::manager::WebDriverManager::builder();
+        builder.preloaded_caps = Some(capabilities.into());
+        builder
+    }
+
     /// End the webdriver session and close the browser.
     ///
     /// **NOTE:** Although `WebDriver` does close when all instances go out of scope.
