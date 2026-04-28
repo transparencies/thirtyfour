@@ -13,14 +13,14 @@ use super::version::DriverVersion;
 ///
 /// The chromedriver download URL comes fully-qualified from the
 /// Chrome-for-Testing JSON index, so there's no separate base-URL field for
-/// it.
+/// it. Geckodriver version resolution is fully offline (driven by the
+/// embedded compatibility table) so no metadata mirror is needed for it
+/// — only the binary download base.
 #[derive(Debug, Clone)]
 pub(crate) struct Mirror {
     /// Base URL for the Chrome-for-Testing JSON metadata. Defaults to the
     /// public CfT endpoint.
     pub chrome_metadata: Url,
-    /// Base URL for the geckodriver GitHub releases API.
-    pub geckodriver_api: Url,
     /// Base URL for geckodriver binary downloads. Defaults to the public
     /// `github.com/mozilla/geckodriver/releases/download/` host.
     pub geckodriver_downloads: Url,
@@ -32,7 +32,6 @@ impl Default for Mirror {
     fn default() -> Self {
         Self {
             chrome_metadata: Url::parse("https://googlechromelabs.github.io/").unwrap(),
-            geckodriver_api: Url::parse("https://api.github.com/").unwrap(),
             geckodriver_downloads: Url::parse(
                 "https://github.com/mozilla/geckodriver/releases/download/",
             )
@@ -73,11 +72,12 @@ pub(crate) async fn resolve_version(
         return Ok("system".to_string());
     }
 
-    let resolve_firefox_for_browser_version = async |fx: &str| -> Result<String, ManagerError> {
-        match geckodriver_for_firefox(fx) {
-            GeckoPick::Latest => fetch_firefox_latest(client, cfg).await,
-            GeckoPick::Pinned(tag) => Ok(tag.to_string()),
-        }
+    let resolve_firefox_for_browser_version = |fx: &str| -> Result<String, ManagerError> {
+        geckodriver_for_firefox(fx)
+            .map(str::to_owned)
+            .ok_or_else(|| ManagerError::Parse(format!(
+                "no geckodriver release in compatibility table covers Firefox {fx}"
+            )))
     };
 
     match spec {
@@ -89,7 +89,7 @@ pub(crate) async fn resolve_version(
         },
         DriverVersion::Latest => match browser {
             BrowserKind::Chrome => fetch_chrome_latest(client, cfg).await,
-            BrowserKind::Firefox => fetch_firefox_latest(client, cfg).await,
+            BrowserKind::Firefox => Ok(firefox_latest_from_table().to_owned()),
             BrowserKind::Edge => fetch_edge_latest(client, cfg).await,
             BrowserKind::Safari => unreachable!("safari short-circuited above"),
         },
@@ -101,7 +101,7 @@ pub(crate) async fn resolve_version(
             match browser {
                 BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await,
                 BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await,
-                BrowserKind::Firefox => resolve_firefox_for_browser_version(v).await,
+                BrowserKind::Firefox => resolve_firefox_for_browser_version(v),
                 BrowserKind::Safari => unreachable!("safari short-circuited above"),
             }
         }
@@ -110,51 +110,62 @@ pub(crate) async fn resolve_version(
             match browser {
                 BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await,
                 BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await,
-                BrowserKind::Firefox => resolve_firefox_for_browser_version(v).await,
+                BrowserKind::Firefox => resolve_firefox_for_browser_version(v),
                 BrowserKind::Safari => unreachable!("safari short-circuited above"),
             }
         }
     }
 }
 
-/// Outcome of mapping a Firefox version to a geckodriver release.
-#[derive(Debug, PartialEq, Eq)]
-enum GeckoPick {
-    /// The local Firefox is recent enough that the latest geckodriver works.
-    Latest,
-    /// The local Firefox needs a specific older geckodriver release.
-    Pinned(&'static str),
+/// One entry in the geckodriver↔Firefox compatibility table.
+struct GeckodriverRelease {
+    /// Tag without the leading `v` (e.g. `"0.36.0"`).
+    version: &'static str,
+    /// Minimum Firefox major version supported by this geckodriver.
+    min_firefox: u32,
+    /// Maximum Firefox major version, if this geckodriver was superseded.
+    /// `None` means "still supported" — typical for the entries at the top
+    /// of the table.
+    max_firefox: Option<u32>,
 }
 
-/// Map a Firefox version string to a known-compatible geckodriver release.
+/// Embedded geckodriver compatibility table, **sorted descending by
+/// geckodriver version** (highest first).
 ///
-/// Source: geckodriver release notes (the "Supported Firefox" line in each
-/// release). The table reflects the upstream support matrix as of geckodriver
-/// 0.36.0:
+/// Modelled after [SeleniumHQ's `geckodriver-support.json`][upstream] but
+/// embedded here so we don't hit any network endpoint to resolve a Firefox →
+/// geckodriver mapping. Update when a new geckodriver release ships (roughly
+/// every 6–12 months); the manager-tests CI workflow will catch staleness if
+/// upstream introduces a Firefox version that no entry covers.
 ///
-/// | geckodriver | minimum Firefox |
-/// |-------------|-----------------|
-/// | 0.34.0+     | 115             |
-/// | 0.33.0      | 102             |
-/// | 0.32.x      | 102             |
-/// | 0.31.0      | 91              |
-/// | 0.30.0      | 60              |
-///
-/// For Firefox < 60 we return `0.30.0` as a best effort — geckodriver doesn't
-/// officially support those versions, but sending them through to the user
-/// with a working-binary path is friendlier than erroring out.
-fn geckodriver_for_firefox(firefox_version: &str) -> GeckoPick {
+/// [upstream]: https://github.com/SeleniumHQ/selenium/blob/trunk/common/geckodriver/geckodriver-support.json
+const GECKODRIVER_RELEASES: &[GeckodriverRelease] = &[
+    GeckodriverRelease { version: "0.36.0", min_firefox: 128, max_firefox: None },
+    GeckodriverRelease { version: "0.35.0", min_firefox: 115, max_firefox: None },
+    GeckodriverRelease { version: "0.34.0", min_firefox: 115, max_firefox: None },
+    GeckodriverRelease { version: "0.33.0", min_firefox: 102, max_firefox: Some(120) },
+    GeckodriverRelease { version: "0.32.2", min_firefox: 102, max_firefox: Some(120) },
+    GeckodriverRelease { version: "0.31.0", min_firefox: 91,  max_firefox: Some(120) },
+    GeckodriverRelease { version: "0.30.0", min_firefox: 78,  max_firefox: Some(90) },
+    GeckodriverRelease { version: "0.29.1", min_firefox: 60,  max_firefox: Some(90) },
+];
+
+/// Pick the best geckodriver release for the given Firefox version. Returns
+/// the highest-versioned entry whose `[min_firefox, max_firefox]` range
+/// covers `firefox_version`. Returns `None` when no entry matches (e.g.
+/// Firefox is older than anything in the table).
+fn geckodriver_for_firefox(firefox_version: &str) -> Option<&'static str> {
     let major: u32 = firefox_version
         .split('.')
         .next()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    match major {
-        m if m >= 115 => GeckoPick::Latest,
-        m if m >= 102 => GeckoPick::Pinned("0.33.0"),
-        m if m >= 91 => GeckoPick::Pinned("0.31.0"),
-        _ => GeckoPick::Pinned("0.30.0"),
-    }
+    GECKODRIVER_RELEASES
+        .iter()
+        .find(|r| {
+            major >= r.min_firefox && r.max_firefox.map_or(true, |max| major <= max)
+        })
+        .map(|r| r.version)
 }
 
 #[derive(Deserialize)]
@@ -252,36 +263,17 @@ fn sort_semver(a: &str, b: &str) -> std::cmp::Ordering {
     parse(a).cmp(&parse(b))
 }
 
-async fn fetch_firefox_latest(
-    client: &reqwest::Client,
-    cfg: &DownloadConfig,
-) -> Result<String, ManagerError> {
-    // Avoid the GitHub *API* entirely (60 req/hr unauthenticated rate limit).
-    // The public `releases/latest` URL 302's to `releases/tag/v<version>` —
-    // reqwest follows redirects by default, so the final response URL has the
-    // tag we need.
-    let url = cfg
-        .mirror
-        .geckodriver_downloads
-        .join("../latest")
-        .map_err(|e| ManagerError::Parse(e.to_string()))?;
-    let resp = client
-        .get(url)
-        .timeout(cfg.download_timeout)
-        .send()
-        .await?
-        .error_for_status()?;
-    let final_url = resp.url().clone();
-    let tag = final_url
-        .path_segments()
-        .and_then(|s| s.last())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            ManagerError::Parse(format!(
-                "unexpected redirect target for geckodriver/latest: {final_url}"
-            ))
-        })?;
-    Ok(tag.trim_start_matches('v').to_string())
+/// `DriverVersion::Latest` for Firefox — returns the highest geckodriver tag
+/// in the embedded compatibility table. Note that this is "latest known to
+/// this thirtyfour release" rather than "literally the latest from upstream"
+/// — geckodriver releases roughly twice a year, and we do not make a network
+/// call to discover newer versions. Users who need a specific newer release
+/// should use [`DriverVersion::Exact`].
+fn firefox_latest_from_table() -> &'static str {
+    GECKODRIVER_RELEASES
+        .first()
+        .expect("GECKODRIVER_RELEASES must not be empty")
+        .version
 }
 
 async fn fetch_edge_latest(
@@ -793,21 +785,35 @@ mod tests {
 
     #[test]
     fn geckodriver_for_firefox_table() {
-        // Modern Firefox: latest geckodriver.
-        assert_eq!(geckodriver_for_firefox("150.0"), GeckoPick::Latest);
-        assert_eq!(geckodriver_for_firefox("128.0.1"), GeckoPick::Latest);
-        assert_eq!(geckodriver_for_firefox("115"), GeckoPick::Latest);
-        // 102–114: pinned 0.33.0.
-        assert_eq!(geckodriver_for_firefox("114.0"), GeckoPick::Pinned("0.33.0"));
-        assert_eq!(geckodriver_for_firefox("102.5"), GeckoPick::Pinned("0.33.0"));
-        // 91–101: pinned 0.31.0.
-        assert_eq!(geckodriver_for_firefox("101.0"), GeckoPick::Pinned("0.31.0"));
-        assert_eq!(geckodriver_for_firefox("91.0"), GeckoPick::Pinned("0.31.0"));
-        // < 91: best-effort 0.30.0.
-        assert_eq!(geckodriver_for_firefox("80.0"), GeckoPick::Pinned("0.30.0"));
-        assert_eq!(geckodriver_for_firefox("60.0"), GeckoPick::Pinned("0.30.0"));
-        // garbage parses as 0 → falls into the < 91 bucket.
-        assert_eq!(geckodriver_for_firefox("nonsense"), GeckoPick::Pinned("0.30.0"));
+        // Latest geckodriver supports Firefox >=128.
+        assert_eq!(geckodriver_for_firefox("150.0"), Some("0.36.0"));
+        assert_eq!(geckodriver_for_firefox("128.0.1"), Some("0.36.0"));
+        // Firefox 115-127: 0.36.0 needs >=128, so we drop to 0.35.0 (>=115, no max).
+        assert_eq!(geckodriver_for_firefox("127.0"), Some("0.35.0"));
+        assert_eq!(geckodriver_for_firefox("115.0"), Some("0.35.0"));
+        // Firefox 102-114: 0.35/0.34 need >=115, so drop to 0.33.0 (102-120).
+        assert_eq!(geckodriver_for_firefox("114.0"), Some("0.33.0"));
+        assert_eq!(geckodriver_for_firefox("102.5"), Some("0.33.0"));
+        // Firefox 91-101: 0.31.0 (91-120).
+        assert_eq!(geckodriver_for_firefox("101.0"), Some("0.31.0"));
+        assert_eq!(geckodriver_for_firefox("91.0"), Some("0.31.0"));
+        // Firefox 78-90: 0.30.0.
+        assert_eq!(geckodriver_for_firefox("80.0"), Some("0.30.0"));
+        assert_eq!(geckodriver_for_firefox("78.0"), Some("0.30.0"));
+        // Firefox 60-77: 0.29.1.
+        assert_eq!(geckodriver_for_firefox("70.0"), Some("0.29.1"));
+        assert_eq!(geckodriver_for_firefox("60.0"), Some("0.29.1"));
+        // Firefox older than anything in the table (< 60): no entry covers it.
+        assert_eq!(geckodriver_for_firefox("50.0"), None);
+        // Garbage parses as 0 → no entry covers it.
+        assert_eq!(geckodriver_for_firefox("nonsense"), None);
+    }
+
+    #[test]
+    fn firefox_latest_is_table_head() {
+        // Sanity: `Latest` for Firefox returns the highest entry, which is the
+        // first element of the table.
+        assert_eq!(firefox_latest_from_table(), "0.36.0");
     }
 
     #[test]

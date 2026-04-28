@@ -211,13 +211,6 @@ impl WebDriverManagerBuilder {
         self
     }
 
-    /// Override the geckodriver GitHub releases API base URL.
-    pub fn geckodriver_api_mirror(mut self, base: Url) -> Self {
-        let m = self.mirror.get_or_insert_with(Mirror::default);
-        m.geckodriver_api = base;
-        self
-    }
-
     /// Override the geckodriver binary download base URL.
     pub fn geckodriver_downloads_mirror(mut self, base: Url) -> Self {
         let m = self.mirror.get_or_insert_with(Mirror::default);

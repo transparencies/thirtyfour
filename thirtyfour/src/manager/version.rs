@@ -5,10 +5,14 @@
 ///
 /// **Note for Firefox**: Firefox version numbers and geckodriver version
 /// numbers are not in 1:1 correspondence — geckodriver is on `0.36.0` while
-/// Firefox is on `150.x`. The manager applies the geckodriver compatibility
-/// table from upstream's release notes (Firefox ≥115 → latest geckodriver;
-/// 102–114 → 0.33.0; 91–101 → 0.31.0; older → 0.30.0). For
+/// Firefox is on `150.x`. The manager picks a compatible geckodriver from an
+/// embedded table modelled after [SeleniumHQ's `geckodriver-support.json`].
+/// `DriverVersion::Latest` for Firefox returns the highest entry in that
+/// embedded table — *not* a live lookup against the geckodriver release feed
+/// — to keep version resolution fully offline. For
 /// [`DriverVersion::Exact`], pass a literal geckodriver tag like `"0.36.0"`.
+///
+/// [SeleniumHQ's `geckodriver-support.json`]: https://github.com/SeleniumHQ/selenium/blob/trunk/common/geckodriver/geckodriver-support.json
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum DriverVersion {
     /// Probe the locally-installed browser binary for its version, then pick a
