@@ -1,4 +1,4 @@
 #!/bin/bash
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-sudo dpkg -i google-chrome-stable_current_amd64.deb
- sudo apt install -f -y
+# Chrome and chromedriver are pre-installed on GitHub-hosted Ubuntu runners.
+# CHROMEWEBDRIVER points at the directory holding the version-matched binary.
+"$CHROMEWEBDRIVER/chromedriver" --port=9515 &

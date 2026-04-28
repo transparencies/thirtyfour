@@ -1,2 +1,3 @@
 #!/bin/bash
-brew install --cask firefox
+# Firefox and geckodriver are pre-installed on GitHub-hosted macOS runners.
+"$GECKOWEBDRIVER/geckodriver" --port=4444 &

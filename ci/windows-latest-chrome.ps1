@@ -1,2 +1,3 @@
-# Fix: sometimes, Chrome is updated but its checksum is not. Ignore this mismatch.
-choco install googlechrome --ignore-checksums -y
+# Chrome and chromedriver are pre-installed on GitHub-hosted Windows runners.
+Start-Process -FilePath "$env:CHROMEWEBDRIVER\chromedriver.exe" -ArgumentList "--port=9515"
+Start-Sleep -Seconds 1
