@@ -71,15 +71,25 @@ fn edge_caps() -> EdgeCapabilities {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_chrome_smoke() -> WebDriverResult<()> {
-    with_timeout(async {
+    eprintln!("[chrome_smoke] entered");
+    let r = with_timeout(async {
+        eprintln!("[chrome_smoke] before WebDriver::managed");
         let driver = WebDriver::managed(chrome_caps()).await?;
+        eprintln!("[chrome_smoke] got WebDriver");
         if !skip_navigation() {
             driver.goto("about:blank").await?;
+            eprintln!("[chrome_smoke] goto done");
+        } else {
+            eprintln!("[chrome_smoke] skipping navigation");
         }
+        eprintln!("[chrome_smoke] before quit");
         driver.quit().await?;
+        eprintln!("[chrome_smoke] quit returned");
         Ok(())
     })
-    .await
+    .await;
+    eprintln!("[chrome_smoke] test fn returning {r:?}");
+    r
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -102,12 +112,19 @@ async fn managed_firefox_smoke() -> WebDriverResult<()> {
 /// existing chrome/firefox smokes.
 #[tokio::test(flavor = "multi_thread")]
 async fn managed_edge_smoke() -> WebDriverResult<()> {
-    with_timeout(async {
+    eprintln!("[edge_smoke] entered");
+    let r = with_timeout(async {
+        eprintln!("[edge_smoke] before WebDriver::managed");
         let driver = WebDriver::managed(edge_caps()).await?;
+        eprintln!("[edge_smoke] got WebDriver");
+        eprintln!("[edge_smoke] before quit");
         driver.quit().await?;
+        eprintln!("[edge_smoke] quit returned");
         Ok(())
     })
-    .await
+    .await;
+    eprintln!("[edge_smoke] test fn returning {r:?}");
+    r
 }
 
 /// Safari is macOS-only and uses the system `safaridriver`. The CI runner must
