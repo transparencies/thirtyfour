@@ -193,27 +193,31 @@ fn run_version(path: &str, browser: BrowserKind) -> Option<String> {
         return None;
     }
 
-    // Firefox on Windows famously doesn't print --version reliably (it
-    // sometimes detaches and prints nothing to stdout). Read the file's PE
-    // VersionInfo via PowerShell instead — equivalent to what selenium-manager
-    // does via the registry, but works for any install path.
+    // On Windows, all of our browsers (Chrome, Edge, Firefox) have `--version`
+    // quirks. They're GUI-subsystem `.exe`s — invoking them from a non-console
+    // parent doesn't reliably write to stdout, and msedge.exe in particular
+    // can launch the full browser and never return. Read the file's PE
+    // VersionInfo via PowerShell instead: same data, no runtime side effects.
     #[cfg(target_os = "windows")]
-    if matches!(browser, BrowserKind::Firefox) {
+    {
+        let _ = browser;
         return read_pe_version(path);
     }
-    #[cfg(not(target_os = "windows"))]
-    let _ = browser;
 
-    let output = Command::new(path).arg("--version").output().ok()?;
-    if !output.status.success() {
-        return None;
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = browser;
+        let output = Command::new(path).arg("--version").output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        parse_version(&String::from_utf8_lossy(&output.stdout))
     }
-    parse_version(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// Read a Windows executable's `ProductVersion` from its PE VersionInfo
 /// resource. Cheap and reliable — it doesn't depend on the binary running, so
-/// it sidesteps any `--version` flushing quirks (specifically Firefox).
+/// it sidesteps any `--version` quirks. Used for all browsers on Windows.
 #[cfg(target_os = "windows")]
 fn read_pe_version(path: &str) -> Option<String> {
     // PowerShell's Get-Item needs an absolute path. Resolve via `where` if
