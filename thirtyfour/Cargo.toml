@@ -17,13 +17,30 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
-default = ["reqwest", "rustls", "component"]
+default = ["reqwest", "rustls", "component", "manager"]
 reqwest = ["dep:reqwest"]
 rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 tokio-multi-threaded = ["tokio/rt-multi-thread"]
 component = ["thirtyfour-macros"]
 debug_sync_quit = []
+# Auto-download and lifetime-manage local chromedriver / geckodriver processes.
+# Pulls in archive-extraction and cache-dir deps. See `thirtyfour::manager`.
+manager = [
+    "reqwest",
+    "reqwest/stream",
+    "tokio/fs",
+    "tokio/process",
+    "dep:dirs",
+    "dep:fs4",
+    "dep:zip",
+    "dep:flate2",
+    "dep:tar",
+]
+# Enable the manager's end-to-end integration tests (under tests/managed.rs).
+# Off by default — the tests download a real driver and spawn a subprocess, so
+# they should only run in a CI job that doesn't pre-start a driver.
+manager-tests = ["manager"]
 
 
 [dependencies]
@@ -60,6 +77,13 @@ reqwest = { version = "0.13", default-features = false, features = [
     "json",
 ], optional = true }
 
+# Optional dependencies pulled in by the `manager` feature.
+dirs = { version = "6", optional = true }
+fs4 = { version = "0.13", default-features = false, features = ["tokio"], optional = true }
+zip = { version = "5", default-features = false, features = ["deflate"], optional = true }
+flate2 = { version = "1", optional = true }
+tar = { version = "0.4", optional = true }
+
 [dev-dependencies]
 assert_matches = "1.5"
 axum = "0.8"
@@ -69,6 +93,8 @@ serial_test = "3.2.0"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tower-http = { version = "0.6", features = ["fs"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+wiremock = "0.6"
+tempfile = "3"
 
 [[example]]
 name = "tokio_async"
@@ -81,6 +107,7 @@ name = "selenium_example"
 
 [[example]]
 name = "minimal_async"
+required-features = ["manager"]
 
 [[example]]
 name = "chrome_devtools"

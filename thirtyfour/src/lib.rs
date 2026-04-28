@@ -199,6 +199,12 @@ pub mod components;
 pub mod error;
 /// Extensions for specific browsers.
 pub mod extensions;
+/// Auto-download and lifetime-managed local WebDriver process management.
+///
+/// Available only with the default `manager` feature. See the module docs for
+/// details and examples.
+#[cfg(feature = "manager")]
+pub mod manager;
 /// Everything related to driving the underlying WebDriver session.
 pub mod session;
 /// Miscellaneous support functions for `thirtyfour` tests.

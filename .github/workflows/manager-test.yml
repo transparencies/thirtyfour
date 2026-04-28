@@ -1,0 +1,56 @@
+on:
+  push:
+    branches: [main]
+  pull_request:
+name: cargo test (manager)
+jobs:
+  manager-test:
+    runs-on: ${{ matrix.os }}
+    name: manager / ${{ matrix.os }} / ${{ matrix.browser }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Chrome and Firefox: tested on every OS — the runners have both
+          # browsers pre-installed.
+          - { os: ubuntu-latest,  browser: chrome }
+          - { os: ubuntu-latest,  browser: firefox }
+          - { os: macos-latest,   browser: chrome }
+          - { os: macos-latest,   browser: firefox }
+          - { os: windows-latest, browser: chrome }
+          - { os: windows-latest, browser: firefox }
+          # Edge: pre-installed on Ubuntu and Windows runners. Skip macOS
+          # (Edge is not pre-installed there).
+          - { os: ubuntu-latest,  browser: edge }
+          - { os: windows-latest, browser: edge }
+          # Safari: macOS-only and uses the system safaridriver. Requires
+          # `safaridriver --enable` plus the Develop menu / Remote Automation
+          # toggle — both wired in the steps below for this matrix entry.
+          - { os: macos-latest,   browser: safari }
+    steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - uses: actions/checkout@v2
+      # Crucially: we do NOT run ./ci/<os>-<browser> here. The manager spawns
+      # its own driver — the test verifies that flow end-to-end. GitHub-hosted
+      # runners have Chrome / Firefox / Edge installed; that's all the manager
+      # needs.
+      - name: Enable safaridriver (Safari only)
+        if: matrix.browser == 'safari'
+        run: |
+          # Allow Remote Automation in Safari. `sudo` is passwordless on
+          # GitHub-hosted macOS runners.
+          sudo safaridriver --enable
+          defaults write com.apple.Safari IncludeDevelopMenu -bool true
+          defaults write com.apple.Safari WebKitDeveloperExtrasEnabledPreferenceKey -bool true
+          defaults write -g WebKitDeveloperExtras -bool true
+      # Filter tests by name so each matrix entry only runs the tests for its
+      # browser — `managed_chrome_*` on the chrome runs, `managed_firefox_*` on
+      # firefox, and so on.
+      - name: cargo test (manager)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p thirtyfour --features manager-tests --test managed -- --test-threads=1 ${{ matrix.browser }}

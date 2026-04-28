@@ -1,13 +1,16 @@
 //! Run as follows:
 //!
 //!     cargo run --example minimal_async
+//!
+//! This example uses `WebDriver::managed` (default `manager` feature), which
+//! auto-downloads the matching `chromedriver` for your installed Chrome,
+//! starts it locally, and shuts it down when the `WebDriver` is dropped.
 
 use thirtyfour::prelude::*;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
     // Navigate to https://wikipedia.org.
     driver.goto("https://wikipedia.org").await?;
 

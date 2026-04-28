@@ -22,6 +22,7 @@ use crate::{By, OptionRect, Rect, SessionId, SwitchTo, WebDriverStatus, WebEleme
 use crate::{IntoArcStr, IntoUrl};
 use crate::{TimeoutConfiguration, WindowHandle};
 
+use super::DriverGuard;
 use super::http::{CmdResponse, HttpClient, run_webdriver_cmd};
 
 /// The SessionHandle contains a shared reference to the HTTP client
@@ -37,6 +38,10 @@ pub struct SessionHandle {
     config: WebDriverConfig,
     /// quit session flag
     quit: Arc<OnceCell<()>>,
+    /// Optional opaque guard that keeps an external resource (e.g. a managed
+    /// `chromedriver` subprocess) alive for as long as this session exists.
+    /// Declared **last** so it drops after `quit` has run in the `Drop` impl.
+    driver_guard: Option<Arc<dyn DriverGuard>>,
 }
 
 impl Debug for SessionHandle {
@@ -65,12 +70,25 @@ impl SessionHandle {
         session_id: SessionId,
         config: WebDriverConfig,
     ) -> WebDriverResult<Self> {
+        Self::new_with_config_and_guard(client, server_url, session_id, config, None)
+    }
+
+    /// Create new `SessionHandle` with the specified `WebDriverConfig` and an
+    /// optional [`DriverGuard`] tying its lifetime to an external resource.
+    pub(crate) fn new_with_config_and_guard(
+        client: Arc<dyn HttpClient>,
+        server_url: impl IntoUrl,
+        session_id: SessionId,
+        config: WebDriverConfig,
+        driver_guard: Option<Arc<dyn DriverGuard>>,
+    ) -> WebDriverResult<Self> {
         Ok(Self {
             client,
             server_url: Arc::new(server_url.into_url()?),
             session_id,
             config,
             quit: Arc::new(OnceCell::new()),
+            driver_guard,
         })
     }
 
@@ -84,12 +102,18 @@ impl SessionHandle {
             session_id: self.session_id.clone(),
             quit: Arc::clone(&self.quit),
             config,
+            driver_guard: self.driver_guard.clone(),
         }
     }
 
     /// The session id for this webdriver session.
     pub fn session_id(&self) -> &SessionId {
         &self.session_id
+    }
+
+    /// The webdriver server URL this session is connected to.
+    pub fn server_url(&self) -> &Url {
+        &self.server_url
     }
 
     /// The configuration used by this instance.
@@ -1236,6 +1260,10 @@ impl Drop for SessionHandle {
             quit: Arc::clone(&self.quit),
             session_id: self.session_id.clone(),
             config: self.config.clone(),
+            // The guard stays on the *original* SessionHandle so it drops after
+            // this DropGuard's quit() future has run. The reconstructed handle
+            // here is just the bits needed to issue the DELETE /session HTTP call.
+            driver_guard: None,
         });
 
         support::spawn_blocked_future(|spawned| async move {
