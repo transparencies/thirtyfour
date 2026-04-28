@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
+use tokio::task::JoinHandle;
 use tracing::{debug, warn};
 
 use super::browser::BrowserKind;
@@ -60,6 +61,11 @@ pub(crate) struct ManagedDriverProcess {
     child: Option<Child>,
     /// Set when shutdown is initiated, so the stdio pump tasks can exit cleanly.
     shutdown: Arc<AtomicBool>,
+    /// Handles for the stdout / stderr pump tasks (when stdio is `Tracing`).
+    /// `Drop` aborts these so the runtime can shut down promptly — Windows
+    /// pipe semantics mean a stuck `next_line().await` would otherwise block
+    /// runtime shutdown indefinitely after `start_kill`.
+    pump_handles: Vec<JoinHandle<()>>,
 }
 
 impl std::fmt::Debug for ManagedDriverProcess {
@@ -147,17 +153,21 @@ async fn spawn_at_port(
         .map_err(|e| ManagerError::Spawn(format!("spawn {}: {}", binary.display(), e)))?;
 
     let shutdown = Arc::new(AtomicBool::new(false));
+    let mut pump_handles = Vec::new();
     if matches!(cfg.stdio, StdioMode::Tracing) {
         if let Some(stdout) = child.stdout.take() {
-            spawn_pump("stdout", stdout, Arc::clone(&shutdown));
+            pump_handles.push(spawn_pump("stdout", stdout, Arc::clone(&shutdown)));
         }
         if let Some(stderr) = child.stderr.take() {
-            spawn_pump("stderr", stderr, Arc::clone(&shutdown));
+            pump_handles.push(spawn_pump("stderr", stderr, Arc::clone(&shutdown)));
         }
     }
 
     if let Err(e) = wait_until_ready(cfg.host, port, cfg.ready_timeout).await {
         let _ = child.kill().await;
+        for h in &pump_handles {
+            h.abort();
+        }
         return Err(e);
     }
 
@@ -167,6 +177,7 @@ async fn spawn_at_port(
         browser,
         child: Some(child),
         shutdown,
+        pump_handles,
     })
 }
 
@@ -179,7 +190,7 @@ fn pick_port(host: IpAddr) -> Result<u16, ManagerError> {
     Ok(port)
 }
 
-fn spawn_pump<R>(stream: &'static str, reader: R, shutdown: Arc<AtomicBool>)
+fn spawn_pump<R>(stream: &'static str, reader: R, shutdown: Arc<AtomicBool>) -> JoinHandle<()>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
@@ -200,7 +211,7 @@ where
                 }
             }
         }
-    });
+    })
 }
 
 async fn wait_until_ready(host: IpAddr, port: u16, timeout: Duration) -> Result<(), ManagerError> {
@@ -239,6 +250,14 @@ impl Drop for ManagedDriverProcess {
             && let Err(e) = child.start_kill()
         {
             warn!(target: "thirtyfour::manager", error = %e, "failed to kill driver");
+        }
+        // Abort the stdio pump tasks. Without this, on Windows the pumps can
+        // remain stuck on `next_line().await` after the child is killed
+        // (anonymous pipe semantics don't always surface EOF cleanly), and the
+        // multi-thread Tokio runtime drops by waiting for all spawned tasks to
+        // finish — blocking process exit indefinitely.
+        for h in self.pump_handles.drain(..) {
+            h.abort();
         }
     }
 }
