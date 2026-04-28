@@ -1,19 +1,18 @@
 [package]
 name = "thirtyfour-macros"
 version = "0.2.0"
-authors = ["Steve Pryde <steve@stevepryde.com>", "Vrtgs"]
 edition = "2021"
-license = "MIT OR Apache-2.0"
 description = """
 Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI testing.
 """
-homepage = "https://github.com/Vrtgs/thirtyfour"
-repository = "https://github.com/Vrtgs/thirtyfour"
 documentation = "https://docs.rs/thirtyfour_macros"
-
 readme = "README.md"
-keywords = ["selenium", "webdriver", "chromedriver", "geckodriver", "automation"]
-categories = ["api-bindings", "development-tools::testing", "web-programming::http-client"]
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [lib]
 proc-macro = true

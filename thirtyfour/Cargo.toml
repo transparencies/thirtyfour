@@ -1,31 +1,20 @@
 [package]
 name = "thirtyfour"
 version = "0.36.2"
-authors = ["Steve Pryde <steve@stevepryde.com>", "Vrtgs <vrtgs@vrtgs.xyz>"]
 edition = "2024"
-license = "MIT OR Apache-2.0"
 description = """
 Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI testing.
 
 Tested on Chrome and Firefox, but any webdriver-capable browser should work.
 """
-homepage = "https://github.com/Vrtgs/thirtyfour"
-repository = "https://github.com/Vrtgs/thirtyfour"
 documentation = "https://docs.rs/thirtyfour"
-
 readme = "README.md"
-keywords = [
-    "selenium",
-    "webdriver",
-    "chromedriver",
-    "geckodriver",
-    "automation",
-]
-categories = [
-    "api-bindings",
-    "development-tools::testing",
-    "web-programming::http-client",
-]
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 default = ["reqwest", "rustls", "component"]

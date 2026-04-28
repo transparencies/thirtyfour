@@ -6,7 +6,7 @@
 //!
 //! ## Getting Started
 //!
-//! Check out [The Book](https://vrtgs.github.io/thirtyfour/) 📚!
+//! Check out [The Book](https://stevepryde.github.io/thirtyfour/) 📚!
 //!
 //! ## Features
 //!

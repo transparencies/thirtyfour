@@ -2,3 +2,21 @@
 resolver = "3"
 
 members = ["thirtyfour", "thirtyfour-macros"]
+
+[workspace.package]
+authors = ["Steve Pryde <steve@stevepryde.com>", "Vrtgs <vrtgs@vrtgs.xyz>"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/stevepryde/thirtyfour"
+repository = "https://github.com/stevepryde/thirtyfour"
+keywords = [
+    "selenium",
+    "webdriver",
+    "chromedriver",
+    "geckodriver",
+    "automation",
+]
+categories = [
+    "api-bindings",
+    "development-tools::testing",
+    "web-programming::http-client",
+]
