@@ -2,8 +2,9 @@ use std::time::Duration;
 
 /// Errors returned by the WebDriver manager.
 ///
-/// Wrapped by [`crate::error::WebDriverError::DriverManager`] when surfaced through
-/// the rest of the crate.
+/// Converted to [`crate::error::WebDriverError`] (as a `SessionCreateError`
+/// variant carrying the manager-specific message) when surfaced through the
+/// rest of the crate.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ManagerError {

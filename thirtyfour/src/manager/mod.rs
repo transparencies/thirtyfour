@@ -26,6 +26,7 @@
 //! ```
 //!
 //! [`WebDriver::managed`]: crate::WebDriver::managed
+//! [`WebDriverManager`]: crate::manager::WebDriverManager
 
 mod browser;
 mod download;

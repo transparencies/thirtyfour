@@ -254,7 +254,7 @@ fn exists_or_in_path(path: &str) -> bool {
 pub(crate) fn parse_version(s: &str) -> Option<String> {
     let mut it = s.chars().peekable();
     while it.peek().is_some() {
-        if !it.peek().map_or(false, |c| c.is_ascii_digit()) {
+        if !it.peek().is_some_and(|c| c.is_ascii_digit()) {
             it.next();
             continue;
         }
@@ -268,7 +268,7 @@ pub(crate) fn parse_version(s: &str) -> Option<String> {
             }
         }
         // Require at least one dot to look like a real version (not "30" from "Mac OS X 10.15...").
-        if buf.contains('.') && buf.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if buf.contains('.') && buf.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             // Strip a trailing dot if any.
             let trimmed = buf.trim_end_matches('.');
             return Some(trimmed.to_string());

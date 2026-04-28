@@ -212,19 +212,16 @@ async fn wait_until_ready(host: IpAddr, port: u16, timeout: Duration) -> Result<
 
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if let Ok(resp) = client.get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(body) = resp.json::<serde_json::Value>().await {
-                    if body
-                        .get("value")
-                        .and_then(|v| v.get("ready"))
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false)
-                    {
-                        return Ok(());
-                    }
-                }
-            }
+        if let Ok(resp) = client.get(&url).send().await
+            && resp.status().is_success()
+            && let Ok(body) = resp.json::<serde_json::Value>().await
+            && body
+                .get("value")
+                .and_then(|v| v.get("ready"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        {
+            return Ok(());
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -238,10 +235,10 @@ impl Drop for ManagedDriverProcess {
         // TerminateProcess on Windows) without blocking; `kill_on_drop(true)`
         // set on the Command ensures the child is reaped asynchronously when
         // the Child handle drops.
-        if let Some(mut child) = self.child.take() {
-            if let Err(e) = child.start_kill() {
-                warn!(target: "thirtyfour::manager", error = %e, "failed to kill driver");
-            }
+        if let Some(mut child) = self.child.take()
+            && let Err(e) = child.start_kill()
+        {
+            warn!(target: "thirtyfour::manager", error = %e, "failed to kill driver");
         }
     }
 }

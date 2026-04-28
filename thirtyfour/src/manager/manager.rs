@@ -102,7 +102,7 @@ impl DriverGuard for ManagedDriverProcess {}
 /// [`WebDriver::managed`]. See the [module documentation](super) for examples.
 ///
 /// [`WebDriver::managed`]: crate::WebDriver::managed
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WebDriverManagerBuilder {
     pub(crate) version: DriverVersion,
     pub(crate) cache_dir: Option<PathBuf>,
@@ -114,22 +114,6 @@ pub struct WebDriverManagerBuilder {
     pub(crate) stdio: Option<StdioMode>,
     /// Set when constructed via `WebDriver::managed(caps)`.
     pub(crate) preloaded_caps: Option<Capabilities>,
-}
-
-impl Default for WebDriverManagerBuilder {
-    fn default() -> Self {
-        Self {
-            version: DriverVersion::default(),
-            cache_dir: None,
-            host: None,
-            download_timeout: None,
-            ready_timeout: None,
-            offline: None,
-            mirror: None,
-            stdio: None,
-            preloaded_caps: None,
-        }
-    }
 }
 
 impl WebDriverManagerBuilder {

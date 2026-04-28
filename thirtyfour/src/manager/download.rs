@@ -190,7 +190,7 @@ fn geckodriver_for_firefox(firefox_version: &str) -> Option<&'static str> {
     let major: u32 = firefox_version.split('.').next().and_then(|s| s.parse().ok()).unwrap_or(0);
     GECKODRIVER_RELEASES
         .iter()
-        .find(|r| major >= r.min_firefox && r.max_firefox.map_or(true, |max| major <= max))
+        .find(|r| major >= r.min_firefox && r.max_firefox.is_none_or(|max| major <= max))
         .map(|r| r.version)
 }
 
