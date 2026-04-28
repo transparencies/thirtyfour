@@ -2,25 +2,19 @@ on:
   push:
     branches: [main]
     # Manager-test runs are heavy (real driver downloads + browser launches
-    # across an OS×browser matrix). Only run them when manager-touching code
-    # changes — kept in sync between push and pull_request below.
+    # across an OS×browser matrix). Only run them when the manager itself or
+    # its tests change. Other adjacent files (lib.rs module decl, the thin
+    # `WebDriver::managed` wrapper, DriverGuard plumbing, error conversion,
+    # Cargo.toml feature gates) are covered by the lighter unit + cargo-hack
+    # workflows — a regression there would fail at compile time, not
+    # silently in an E2E test. Kept in sync between push and pull_request.
     paths:
       - 'thirtyfour/src/manager/**'
-      - 'thirtyfour/src/web_driver.rs'
-      - 'thirtyfour/src/session/**'
-      - 'thirtyfour/src/lib.rs'
-      - 'thirtyfour/src/error.rs'
-      - 'thirtyfour/Cargo.toml'
       - 'thirtyfour/tests/managed.rs'
       - '.github/workflows/manager-test.yml'
   pull_request:
     paths:
       - 'thirtyfour/src/manager/**'
-      - 'thirtyfour/src/web_driver.rs'
-      - 'thirtyfour/src/session/**'
-      - 'thirtyfour/src/lib.rs'
-      - 'thirtyfour/src/error.rs'
-      - 'thirtyfour/Cargo.toml'
       - 'thirtyfour/tests/managed.rs'
       - '.github/workflows/manager-test.yml'
 name: cargo test (manager)
