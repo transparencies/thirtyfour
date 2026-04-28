@@ -3,7 +3,7 @@
 //!     cargo run --example firefox_preferences
 
 use thirtyfour::common::capabilities::firefox::FirefoxPreferences;
-use thirtyfour::{FirefoxCapabilities, WebDriver, start_webdriver_process};
+use thirtyfour::{FirefoxCapabilities, WebDriver};
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
@@ -20,9 +20,7 @@ async fn main() -> color_eyre::Result<()> {
     let mut caps = FirefoxCapabilities::new();
     caps.set_preferences(prefs)?;
 
-    let server_url = "http://localhost:4444";
-    start_webdriver_process(server_url, &caps, true)?;
-    let driver = WebDriver::new(server_url, caps).await?;
+    let driver = WebDriver::new("http://localhost:4444", caps).await?;
     driver.goto("https://www.google.com").await?;
 
     // Get the user agent and verify.

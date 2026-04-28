@@ -21,10 +21,8 @@ use crate::session::http::create_reqwest_client;
 ///
 /// # fn main() -> color_eyre::Result<()> {
 /// #     block_on(async {
-/// let server_url = "http://localhost:4444";
 /// let caps = DesiredCapabilities::firefox();
-/// start_webdriver_process(server_url, &caps, true)?;
-/// let driver = WebDriver::new(server_url, caps).await?;
+/// let driver = WebDriver::new("http://localhost:4444", caps).await?;
 /// driver.goto("https://www.rust-lang.org/").await?;
 /// // Always remember to close the session.
 /// driver.quit().await?;

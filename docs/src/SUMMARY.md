@@ -13,7 +13,6 @@
 - [Components](./features/components.md)
 # Useful Tools
 - [Selenium](./tools/selenium.md)
-- [Selenium Manager](./tools/selenium-manager.md)
 # Contributing
 - [Running Tests For Thirtyfour](./contributing/testing.md)
 # Appendix

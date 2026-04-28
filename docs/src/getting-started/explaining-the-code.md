@@ -19,9 +19,7 @@ So let's go through the code and see what is going on.
 
 ```rust
     let caps = DesiredCapabilities::chrome();
-    let server_url = "http://localhost:9515";
-    start_webdriver_process(server_url, &caps, true)?;
-    let driver = WebDriver::new(server_url, caps).await?;
+    let driver = WebDriver::new("http://localhost:9515", caps).await?;
 ```
 
 This is where we actually make the initial connection to the webdriver and start a new

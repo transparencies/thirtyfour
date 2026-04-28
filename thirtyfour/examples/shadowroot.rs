@@ -12,9 +12,7 @@ async fn main() -> color_eyre::Result<()> {
     }
 
     let caps = DesiredCapabilities::chrome();
-    let server_url = "http://localhost:9515";
-    start_webdriver_process(server_url, &caps, true)?;
-    let driver = WebDriver::new(server_url, caps).await?;
+    let driver = WebDriver::new("http://localhost:9515", caps).await?;
 
     // Navigate to website containing example shadowroot.
     driver.goto("https://web.dev/shadowdom-v1/").await?;

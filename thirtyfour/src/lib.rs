@@ -32,23 +32,19 @@
 //! * `rustls-tls`: (Default) Use rustls to provide TLS support (via reqwest).
 //! * `native-tls`: Use native TLS (via reqwest).
 //! * `component`: (Default) Enable the `Component` derive macro (via thirtyfour-macros).
-//! * `selenium-mamager`: (Default) Provide `start_webdriver_process` and related
-//!   structs.
 //!
 //! ## Example
 //!
 //! The following example assumes you have a compatible version of Chrome
-//! installed.
+//! installed and `chromedriver` running on port 4444.
 //!
 //! ```no_run
 //! use thirtyfour::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() -> color_eyre::Result<()> {
-//!     let server_url = "http://localhost:4444";
 //!     let caps = DesiredCapabilities::chrome();
-//!     start_webdriver_process(server_url, &caps, false)?;
-//!     let driver = WebDriver::new(server_url, caps).await?;
+//!     let driver = WebDriver::new("http://localhost:4444", caps).await?;
 //!
 //!     // Navigate to https://wikipedia.org.
 //!     driver.goto("https://wikipedia.org").await?;
@@ -173,11 +169,6 @@ pub use common::{
 };
 pub use switch_to::SwitchTo;
 pub use web_driver::WebDriver;
-#[cfg(feature = "selenium-manager")]
-pub use web_driver_process::{
-    WebDriverProcess, WebDriverProcessBrowser, WebDriverProcessPort, start_webdriver_process,
-    start_webdriver_process_full,
-};
 pub use web_element::WebElement;
 
 /// Allow importing the common types via `use thirtyfour::prelude::*`.
@@ -188,8 +179,6 @@ pub mod prelude {
     pub use crate::error::{WebDriverError, WebDriverResult};
     pub use crate::extensions::query::{ElementPoller, ElementQueryable, ElementWaitable};
     pub use crate::session::scriptret::ScriptRet;
-    #[cfg(feature = "selenium-manager")]
-    pub use crate::start_webdriver_process;
     pub use crate::switch_to::SwitchTo;
     pub use crate::{
         BrowserCapabilitiesHelper, By, Capabilities, CapabilitiesHelper, ChromiumLikeCapabilities,
@@ -218,8 +207,6 @@ pub mod support;
 mod js;
 mod switch_to;
 mod web_driver;
-#[cfg(feature = "selenium-manager")]
-mod web_driver_process;
 mod web_element;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");

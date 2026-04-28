@@ -26,8 +26,6 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.toolchain }}
       - uses: actions/checkout@v2
-        with:
-          submodules: true
       - name: Install ${{ matrix.browser }}
         run: |
           ./ci/${{ matrix.os }}-${{ matrix.browser }}

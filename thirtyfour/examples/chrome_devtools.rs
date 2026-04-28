@@ -12,9 +12,7 @@ async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
     let caps = DesiredCapabilities::chrome();
-    let server_url = "http://localhost:9515";
-    start_webdriver_process(server_url, &caps, true)?;
-    let driver = WebDriver::new(server_url, caps).await?;
+    let driver = WebDriver::new("http://localhost:9515", caps).await?;
 
     // Use Chrome Devtools Protocol (CDP).
     let dev_tools = ChromeDevTools::new(driver.handle.clone());

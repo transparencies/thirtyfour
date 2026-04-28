@@ -31,8 +31,6 @@ Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI 
 - `rustls-tls`: (Default) Use rustls to provide TLS support (via reqwest).
 - `native-tls`: Use native TLS (via reqwest).
 - `component`: (Default) Enable the `Component` derive macro (via thirtyfour_macros).
-- `selenium-manager`: (Default) Enable the Selenium manager, which downloads then starts
-  the correct webdriver.
 
 ### Example (async):
 
@@ -46,9 +44,7 @@ use thirtyfour::prelude::*;
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
      let caps = DesiredCapabilities::chrome();
-     let server_url = "http://localhost:9515";
-     start_webdriver_process(server_url, &caps, true)?;
-     let driver = WebDriver::new(server_url, caps).await?;
+     let driver = WebDriver::new("http://localhost:9515", caps).await?;
 
      // Navigate to https://wikipedia.org.
      driver.goto("https://wikipedia.org").await?;
