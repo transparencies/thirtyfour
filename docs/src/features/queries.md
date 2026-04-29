@@ -1,18 +1,20 @@
 # Element Queries
 
-`ElementQuery` is the way to find elements in `thirtyfour`. Whenever
-you'd reach for `find()` or `find_all()`, reach for `query()` instead.
-The `find*()` methods exist only to mirror the W3C WebDriver spec —
-they don't poll, don't wait for the element to appear, and produce
-thin error messages when something's missing. Almost every real
-automation needs at least one of those things, so `query()` is what
-the rest of this chapter assumes.
-
-## How It Works
+To find elements on a page, call `.query(...)` on a `WebDriver` or a
+`WebElement`. `query()` is the recommended way to locate elements:
+it knows how to wait for the element to appear, can describe what
+you were looking for in error messages, and lets you chain filters
+and alternatives until the query returns exactly what you want.
 
 ```rust
 let elem = driver.query(By::Id("search-form")).single().await?;
 ```
+
+That's the basic shape. The rest of this chapter unpacks each piece —
+the selectors you can pass, the filters you can chain, and the
+terminator at the end that decides what comes back.
+
+## How It Works
 
 A query has three parts:
 
@@ -202,12 +204,16 @@ let cart = driver
 If the query times out, the error includes `"shopping cart badge"`
 instead of just the raw CSS selector.
 
-## When To Use `find()` / `find_all()`
+## A Note On `find()` / `find_all()`
 
-Almost never. They exist for spec parity and for the rare case where
-you genuinely want a one-shot lookup with no polling. Anywhere a
-flickering DOM, an in-flight network request, or a slow load could
-matter, `query()` is more reliable and gives better diagnostics.
+You may run across `find()` and `find_all()` methods on `WebDriver`
+and `WebElement`. They exist to mirror the W3C WebDriver
+specification — a one-shot lookup with no polling, no filters, and a
+thin error if nothing matches. They're fine for the rare case where
+you genuinely want exactly that, but for everyday automation prefer
+`query()`: it handles slow loads, missing elements, and flickering
+DOMs more gracefully and gives better diagnostics when something
+goes wrong.
 
 ## API Reference
 
