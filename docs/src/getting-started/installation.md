@@ -5,17 +5,17 @@ To use the `thirtyfour` crate in your Rust project, you need to add it as a depe
     [dependencies]
     thirtyfour = "THIRTYFOUR_CRATE_VERSION"
 
-To automate a web browser, `thirtyfour` needs to communicate with a webdriver server. You will need
-to download the appropriate webdriver server for your browser.
+To automate a web browser, `thirtyfour` needs to communicate with a webdriver
+server (`chromedriver`, `geckodriver`, etc.). With the default feature set
+this is taken care of for you: the [Managed WebDriver](../features/manager.md)
+feature auto-downloads a compatible driver for your locally-installed browser,
+caches it, and runs it as a child process for the lifetime of your `WebDriver`
+handle. You don't need to download or start anything yourself.
 
-* For Chrome, download [chromedriver](https://developer.chrome.com/docs/chromedriver/downloads)
-* For Firefox, download [geckodriver](https://github.com/mozilla/geckodriver/releases)
+You will still need the corresponding web browser (Chrome, Firefox, Edge, or
+Safari on macOS) to be installed in your operating system.
 
-The webdriver may be zipped. Unzip it and place the webdriver binary somewhere in your `PATH`.
-Make sure it is executable and that you have permissions to run it.
-
-You will also need the corresponding web browser to be installed in your Operating System.
-Make sure the webdriver version you download corresponds to the version of the browser you have installed.
-
-> If the webdriver is not the right version for your browser, it will show an error message when
-> you try to start a new session using `thirtyfour`.
+> If you'd rather download and run a webdriver yourself — for example, to point
+> `thirtyfour` at a remote Selenium grid, or because you've disabled the
+> `manager` feature — see
+> [Manual WebDriver Setup](../appendix/manual-webdriver.md) in the Appendix.

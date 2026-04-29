@@ -11,10 +11,12 @@
 - [Element Queries](./features/queries.md)
 - [Waiting For Element Changes](./features/waiting.md)
 - [Components](./features/components.md)
+- [Managed WebDriver](./features/manager.md)
 # Useful Tools
 - [Selenium](./tools/selenium.md)
 # Contributing
 - [Running Tests For Thirtyfour](./contributing/testing.md)
 # Appendix
+- [Manual WebDriver Setup](./appendix/manual-webdriver.md)
 - [Frequently Asked Questions](./appendix/faq.md)
 - [Further Reading](./appendix/reading.md)

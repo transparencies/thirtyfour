@@ -61,10 +61,32 @@ fn builder_stdio() {
 }
 
 #[test]
-fn shared_returns_same_arc() {
-    let a = WebDriverManager::shared();
-    let b = WebDriverManager::shared();
-    assert!(std::sync::Arc::ptr_eq(&a, &b));
+fn builder_driver_binary_records_per_browser_paths() {
+    let mgr = WebDriverManager::builder()
+        .driver_binary(BrowserKind::Chrome, "/usr/local/bin/chromedriver")
+        .driver_binary(BrowserKind::Firefox, "/usr/local/bin/geckodriver")
+        .build();
+    assert_eq!(
+        mgr.cfg.driver_paths.get(&BrowserKind::Chrome).map(|p| p.to_str().unwrap()),
+        Some("/usr/local/bin/chromedriver")
+    );
+    assert_eq!(
+        mgr.cfg.driver_paths.get(&BrowserKind::Firefox).map(|p| p.to_str().unwrap()),
+        Some("/usr/local/bin/geckodriver")
+    );
+    assert!(!mgr.cfg.driver_paths.contains_key(&BrowserKind::Edge));
+}
+
+#[test]
+fn builder_driver_binary_overwrites_same_browser() {
+    let mgr = WebDriverManager::builder()
+        .driver_binary(BrowserKind::Chrome, "/old/chromedriver")
+        .driver_binary(BrowserKind::Chrome, "/new/chromedriver")
+        .build();
+    assert_eq!(
+        mgr.cfg.driver_paths.get(&BrowserKind::Chrome).map(|p| p.to_str().unwrap()),
+        Some("/new/chromedriver")
+    );
 }
 
 fn hash_of<T: Hash>(t: &T) -> u64 {
@@ -291,36 +313,14 @@ async fn resolve_version_emits_resolving_then_resolved() {
 }
 
 #[test]
-fn builder_with_status_subscriber_opts_out_of_shared_singleton() {
-    // Two consecutive `WebDriver::managed(caps)` calls without options share
-    // the singleton. Once we register an `on_status` subscriber, we must opt
-    // out of the singleton so the subscriber doesn't leak across unrelated
-    // callers.
-    let mut caps = Capabilities::new();
-    caps.insert("browserName".into(), json!("chrome"));
-
-    // Sanity: bare builder is_all_defaults — covered indirectly by the shared
-    // singleton path.
-    let bare = WebDriverManager::builder();
-    assert!(bare.preloaded_caps.is_none());
-
-    // With a status subscriber, is_all_defaults should be false. We reach that
-    // through the public API: build the manager twice and ensure the Arcs
-    // differ. (`shared()` reuses; a non-shared build returns a fresh Arc each
-    // time.)
+fn builder_on_status_subscriber_receives_events() {
     let log = Arc::new(Mutex::new(Vec::<String>::new()));
     let captured = Arc::clone(&log);
-    let m1 = WebDriverManager::builder()
+    let mgr = WebDriverManager::builder()
         .on_status(move |s| captured.lock().unwrap().push(s.to_string()))
         .build();
-    let captured2 = Arc::clone(&log);
-    let m2 = WebDriverManager::builder()
-        .on_status(move |s| captured2.lock().unwrap().push(s.to_string()))
-        .build();
-    assert!(!std::sync::Arc::ptr_eq(&m1, &m2), "subscriber-bearing builders must not share state");
 
-    // And the subscriber receives manually-emitted events.
-    m1.emitter.emit(Status::BrowserKindResolved {
+    mgr.emitter.emit(Status::BrowserKindResolved {
         browser: BrowserKind::Chrome,
     });
     assert_eq!(log.lock().unwrap().len(), 1);
