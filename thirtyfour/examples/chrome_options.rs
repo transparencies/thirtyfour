@@ -1,6 +1,9 @@
 //! Run as follows:
 //!
 //!     cargo run --example chrome_options
+//!
+//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
+//! the matching `chromedriver` for your installed Chrome and starts it locally.
 
 use thirtyfour::prelude::*;
 
@@ -20,7 +23,7 @@ async fn main() -> color_eyre::Result<()> {
             }
         }),
     )?;
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(caps).await?;
 
     // Navigate to https://wikipedia.org.
     driver.goto("https://wikipedia.org").await?;

@@ -24,7 +24,7 @@
 //! - Alert support
 //! - Capture / Save screenshot of browser or individual element as PNG
 //! - Some Chrome DevTools Protocol (CDP) support
-//! - Advanced query interface including explicit waits and various predicates
+//! - Powerful query interface (the recommended way to find elements) with explicit waits and various predicates
 //! - Component Wrappers (similar to `Page Object Model`)
 //!
 //! ## Feature Flags
@@ -83,14 +83,15 @@
 //! while quiting. you can use the feature `debug_sync_quit` to get a backtrace printed if your webdriver ever
 //! quits synchronously
 //!
-//! ### Advanced element queries and explicit waits
+//! ### Element queries and explicit waits
 //!
-//! You can use [`WebDriver::query`] to perform more advanced queries
-//! including polling and filtering. Custom filter functions are also supported.
+//! [`WebDriver::query`] is the recommended way to find elements. It polls
+//! until the element appears, supports filtering and chained alternatives,
+//! and produces clearer error messages when nothing matches. Custom filter
+//! functions are also supported.
 //!
-//! Also, the [`WebElement::wait_until`] method provides additional support for explicit waits
-//! using a variety of built-in predicates. You can also provide your own custom predicate if
-//! desired.
+//! The [`WebElement::wait_until`] method provides explicit waits using a
+//! variety of built-in predicates, plus an escape hatch for custom predicates.
 //!
 //! See the [`query`] documentation for more details and examples.
 //!

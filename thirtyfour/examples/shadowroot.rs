@@ -1,6 +1,9 @@
 //! Run as follows:
 //!
 //!     cargo run --example shadowroot
+//!
+//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
+//! the matching `chromedriver` for your installed Chrome and starts it locally.
 
 use thirtyfour::prelude::*;
 
@@ -11,8 +14,7 @@ async fn main() -> color_eyre::Result<()> {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
 
     // Navigate to website containing example shadowroot.
     driver.goto("https://web.dev/shadowdom-v1/").await?;

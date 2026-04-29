@@ -18,13 +18,27 @@ running, `thirtyfour` can do just about anything a human can do in a web browser
 So let's go through the code and see what is going on.
 
 ```rust
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
 ```
 
-This is where we actually make the initial connection to the webdriver and start a new
-session in the web browser. This will open the browser in a new profile (so it won't add
-anything to your history etc.) and navigate to the default start page.
+This single line does a lot of work for you:
+
+1. Picks a `chromedriver` version that matches your installed Chrome (downloading and caching the binary the first time, reusing it after).
+2. Spawns it as a child process on a free local port and waits for it to be ready.
+3. Connects to it and starts a new browser session.
+
+The session opens the browser in a new profile (so it won't add anything to your
+history etc.) and navigates to the default start page. When the last `WebDriver`
+handle drops, the browser closes and the driver subprocess is torn down with it.
+
+See [WebDriver Manager](../features/manager.md) for everything else the manager
+can do — pinning a specific driver version, sharing one manager across many
+sessions, supplying a pre-installed driver binary, and observing what's
+happening as the manager works.
+
+> If you'd rather run the webdriver yourself — for example to point `thirtyfour` at a
+> remote Selenium grid — see [Manual WebDriver Setup](../appendix/manual-webdriver.md)
+> in the Appendix. The remaining sections work the same either way.
 
 ## Capabilities
 
@@ -32,12 +46,6 @@ The way we tell it what browser we want is by using `DesiredCapabilities`. In th
 we construct a new `ChromeCapabilities` instance. Each `*Capabilities` struct will have
 additional helper methods for setting options like headless mode, proxy, and so on.
 See the [documentation](https://docs.rs/thirtyfour/latest/thirtyfour/common/capabilities/chrome/struct.ChromeCapabilities.html) for more details.
-
-> You may have heard of `selenium`. `Selenium` is simply a proxy that forwards requests to one or
-> more webdriver servers. Using `Selenium` you can interact with multiple browsers at once. You simply
-> tell `Selenium` where each of the webdrivers are, and some details of each browser, and then in your
-> code you give `thirtyfour` the address of the selenium server, not the webdriver, and use the
-> `DesiredCapabilities` to request a particular browser.
 
 ## Element Queries
 

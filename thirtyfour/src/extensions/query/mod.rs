@@ -1,4 +1,5 @@
-//! Advanced query interface featuring powerful filtering and polling options.
+//! Powerful query interface featuring filtering and polling options. This is
+//! the recommended way to find elements in `thirtyfour`.
 //!
 //! See examples for more details.
 //!

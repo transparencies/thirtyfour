@@ -1,10 +1,9 @@
-//! Requires chromedriver running on port 9515:
-//!
-//!     chromedriver --port=9515
-//!
 //! Run as follows:
 //!
 //!     cargo run --example custom_poller
+//!
+//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
+//! the matching `chromedriver` for your installed Chrome and starts it locally.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,8 +16,7 @@ use thirtyfour::prelude::*;
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
 
     // Navigate to https://wikipedia.org.
     driver.goto("https://wikipedia.org").await?;

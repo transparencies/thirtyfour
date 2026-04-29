@@ -30,8 +30,8 @@ use thirtyfour::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
+
     // Navigate to https://wikipedia.org.
     driver.goto("https://wikipedia.org").await?;
     let elem_form = driver.find(By::Id("search-form")).await?;
@@ -57,37 +57,28 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 ```
 
-Next we need to make sure our webdriver is running.
-
-Open your terminal application and run:
-
-    chromedriver
-
-> **NOTE:** This tutorial is currently set up for Chrome.
-> If you'd prefer to run on Firefox instead, this is explained below.
-
-Now open a new tab in your terminal and run your code:
+Make sure Chrome is installed, then run:
 
     cargo run
 
 If everything worked correctly you should have seen a Chrome browser window open up,
 navigate to the "Selenium" article on Wikipedia, and then close again.
 
+The first run will take a few seconds longer than subsequent runs — `thirtyfour`
+downloads a matching `chromedriver` into your system cache directory the first time,
+then reuses it on every later run. See [WebDriver Manager](../features/manager.md)
+for the version-pinning, offline-mode, and observability options that the manager
+provides.
+
 ## Running on Firefox
 
-To run the code using Firefox instead, we first need to tell `thirtyfour` to use the 
-configuration for Firefox. To do this, change the first to lines of your `main` function to this:
+To run the code using Firefox instead, change the capabilities in `main`:
 
 ```rust
-    let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new("http://localhost:4444", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::firefox()).await?;
 ```
 
-Now, instead of running `chromedriver` in your terminal, we'll run `geckodriver` instead:
-
-    geckodriver
-
-And again, in the other tab, run your code again:
+Make sure Firefox is installed, and re-run:
 
     cargo run
 

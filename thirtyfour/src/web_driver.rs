@@ -157,23 +157,14 @@ impl WebDriver {
     /// # Ok(()) }
     /// ```
     ///
-    /// Use [`WebDriverManager::builder`] explicitly when you need a single
-    /// manager to drive multiple browsers in one process.
-    ///
-    /// ## Process sharing across calls
-    ///
-    /// When called with no chained customization, multiple `WebDriver::managed`
-    /// calls in the same process share a single underlying driver subprocess
-    /// (refcount-keyed on `(browser, resolved_version, host)`). The shared
-    /// driver lives only as long as at least one connected `WebDriver` exists.
-    ///
-    /// **Any chained customization** — `.latest()`, `.cache_dir(...)`,
-    /// `.host(...)`, etc. — opts out of sharing and builds a *fresh* manager
-    /// for that call. If you want to share one customized manager across many
-    /// sessions, construct it explicitly via [`WebDriverManager::builder`] and
-    /// call `.launch(caps)` on it for each session.
+    /// Each call constructs its own [`WebDriverManager`] and spawns its own
+    /// driver subprocess. To share one manager (and its driver subprocesses)
+    /// across many sessions, construct it explicitly via
+    /// [`WebDriverManager::builder`] and call `.launch(caps)` on it for each
+    /// session.
     ///
     /// [`WebDriverManagerBuilder`]: crate::manager::WebDriverManagerBuilder
+    /// [`WebDriverManager`]: crate::manager::WebDriverManager
     /// [`WebDriverManager::builder`]: crate::manager::WebDriverManager::builder
     #[cfg(feature = "manager")]
     pub fn managed<C>(capabilities: C) -> crate::manager::WebDriverManagerBuilder

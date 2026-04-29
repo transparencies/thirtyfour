@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::future::{Future, IntoFuture};
 use std::net::{IpAddr, Ipv4Addr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -41,17 +41,12 @@ fn default_cache_dir() -> PathBuf {
     dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("thirtyfour").join("drivers")
 }
 
-/// Process-wide default manager.
-fn shared_manager() -> &'static Arc<WebDriverManager> {
-    static SHARED: OnceLock<Arc<WebDriverManager>> = OnceLock::new();
-    SHARED.get_or_init(|| WebDriverManager::builder().build())
-}
-
 /// Auto-download and lifetime-managed local WebDriver process manager.
 ///
-/// See the [module documentation](super) for the high-level usage; the most
-/// common entry points are [`WebDriver::managed`] (one-shot) and
-/// [`WebDriverManager::builder`] (for sharing one manager across many sessions).
+/// See the [module documentation](super) for the high-level usage. The two
+/// common entry points are [`WebDriver::managed`] (one-shot, fresh manager
+/// per call) and [`WebDriverManager::builder`] (for sharing one manager
+/// across many sessions).
 ///
 /// [`WebDriver::managed`]: crate::WebDriver::managed
 pub struct WebDriverManager {
@@ -86,6 +81,10 @@ pub(crate) struct ResolvedConfig {
     pub offline: bool,
     pub mirror: Mirror,
     pub stdio: StdioMode,
+    /// Per-browser driver-binary overrides. When a browser appears here,
+    /// `ensure_driver` skips download/cache and spawns the supplied binary
+    /// directly.
+    pub driver_paths: HashMap<BrowserKind, PathBuf>,
 }
 
 impl std::fmt::Debug for ResolvedConfig {
@@ -98,6 +97,7 @@ impl std::fmt::Debug for ResolvedConfig {
             .field("ready_timeout", &self.ready_timeout)
             .field("offline", &self.offline)
             .field("stdio", &self.stdio)
+            .field("driver_paths", &self.driver_paths)
             .finish_non_exhaustive()
     }
 }
@@ -161,6 +161,9 @@ pub struct WebDriverManagerBuilder {
     pub(crate) offline: Option<bool>,
     pub(crate) mirror: Option<Mirror>,
     pub(crate) stdio: Option<StdioMode>,
+    /// Per-browser driver-binary overrides registered via
+    /// [`WebDriverManagerBuilder::driver_binary`].
+    pub(crate) driver_paths: HashMap<BrowserKind, PathBuf>,
     /// Status subscribers registered before `build`.
     pub(crate) status_subscribers: Vec<StatusCallback>,
     /// Driver-log subscribers registered before `build`.
@@ -179,6 +182,7 @@ impl std::fmt::Debug for WebDriverManagerBuilder {
             .field("ready_timeout", &self.ready_timeout)
             .field("offline", &self.offline)
             .field("stdio", &self.stdio)
+            .field("driver_paths", &self.driver_paths)
             .field("status_subscribers", &self.status_subscribers.len())
             .field("log_subscribers", &self.log_subscribers.len())
             .finish_non_exhaustive()
@@ -196,6 +200,7 @@ impl Clone for WebDriverManagerBuilder {
             offline: self.offline,
             mirror: self.mirror.clone(),
             stdio: self.stdio,
+            driver_paths: self.driver_paths.clone(),
             status_subscribers: self.status_subscribers.iter().map(Arc::clone).collect(),
             log_subscribers: self.log_subscribers.iter().map(Arc::clone).collect(),
             preloaded_caps: self.preloaded_caps.clone(),
@@ -300,14 +305,37 @@ impl WebDriverManagerBuilder {
         self
     }
 
+    /// Use an already-installed driver binary at `path` for the given
+    /// browser instead of resolving and downloading one. Skips the
+    /// version-resolution and download/cache flow entirely; the binary is
+    /// spawned as-is. Bare command names (e.g. `"chromedriver"`) are
+    /// resolved against the OS `PATH`.
+    ///
+    /// This is intended for environments that ship their own driver — CI
+    /// images with pinned binaries, sandboxes with no network access, or
+    /// users who simply prefer to manage driver versions themselves. If
+    /// the binary doesn't match the installed browser's version, expect a
+    /// runtime error from the driver when the session is started.
+    ///
+    /// Call once per browser to override drivers for a multi-browser
+    /// manager:
+    ///
+    /// ```no_run
+    /// # use thirtyfour::manager::{WebDriverManager, BrowserKind};
+    /// let mgr = WebDriverManager::builder()
+    ///     .driver_binary(BrowserKind::Chrome, "/usr/local/bin/chromedriver")
+    ///     .driver_binary(BrowserKind::Firefox, "/usr/local/bin/geckodriver")
+    ///     .build();
+    /// ```
+    pub fn driver_binary(mut self, browser: BrowserKind, path: impl Into<PathBuf>) -> Self {
+        self.driver_paths.insert(browser, path.into());
+        self
+    }
+
     /// Register a closure to receive every [`Status`] event emitted by the
     /// resulting manager. Equivalent to calling
     /// [`WebDriverManager::subscribe`] right after `build`, except the
     /// subscriber is attached for the manager's whole lifetime — not removable.
-    ///
-    /// Registering at least one subscriber via this method opts out of the
-    /// process-wide shared singleton (see [`WebDriverManager::shared`]) so the
-    /// subscriber doesn't leak across calls of unrelated callers.
     pub fn on_status<F>(mut self, f: F) -> Self
     where
         F: Fn(&Status) + Send + Sync + 'static,
@@ -321,9 +349,6 @@ impl WebDriverManagerBuilder {
     /// [`WebDriverManager::on_driver_log`] applied right after `build`, except
     /// the subscriber is attached for the manager's whole lifetime — not
     /// removable.
-    ///
-    /// Registering at least one subscriber via this method opts out of the
-    /// shared singleton.
     pub fn on_driver_log<F>(mut self, f: F) -> Self
     where
         F: Fn(&DriverLogLine) + Send + Sync + 'static,
@@ -343,6 +368,7 @@ impl WebDriverManagerBuilder {
             offline: self.offline.unwrap_or(false),
             mirror: self.mirror.unwrap_or_default(),
             stdio: self.stdio.unwrap_or_default(),
+            driver_paths: self.driver_paths,
         };
         let emitter = Emitter::new();
         for cb in self.status_subscribers {
@@ -364,22 +390,6 @@ impl WebDriverManagerBuilder {
             next_driver_id: Arc::new(AtomicU64::new(0)),
         })
     }
-
-    /// `true` if every configuration field is at its default. Lets
-    /// `WebDriver::managed` route through the process-wide shared manager when
-    /// the user hasn't overridden anything.
-    fn is_all_defaults(&self) -> bool {
-        self.version == DriverVersion::default()
-            && self.cache_dir.is_none()
-            && self.host.is_none()
-            && self.download_timeout.is_none()
-            && self.ready_timeout.is_none()
-            && self.offline.is_none()
-            && self.mirror.is_none()
-            && self.stdio.is_none()
-            && self.status_subscribers.is_empty()
-            && self.log_subscribers.is_empty()
-    }
 }
 
 impl IntoFuture for WebDriverManagerBuilder {
@@ -392,12 +402,7 @@ impl IntoFuture for WebDriverManagerBuilder {
                 .preloaded_caps
                 .clone()
                 .ok_or_else(|| WebDriverError::from(ManagerError::NoCapabilities))?;
-            let mgr = if self.is_all_defaults() {
-                Arc::clone(shared_manager())
-            } else {
-                self.build()
-            };
-            mgr.launch(caps).await
+            self.build().launch(caps).await
         })
     }
 }
@@ -406,14 +411,6 @@ impl WebDriverManager {
     /// Construct an empty builder.
     pub fn builder() -> WebDriverManagerBuilder {
         WebDriverManagerBuilder::default()
-    }
-
-    /// Process-wide default manager. Used by [`WebDriver::managed`] when no
-    /// configuration is supplied. Multiple calls return the same `Arc`.
-    ///
-    /// [`WebDriver::managed`]: crate::WebDriver::managed
-    pub fn shared() -> Arc<Self> {
-        Arc::clone(shared_manager())
     }
 
     /// Register a closure to receive every [`Status`] event emitted by this
@@ -502,6 +499,15 @@ impl WebDriverManager {
             browser,
         });
 
+        // Manual binary override: skip the resolve/download flow entirely
+        // and spawn the supplied path directly. Version string for the
+        // DriverKey + Status events is synthesized from the path so manual
+        // entries don't collide with cache-keyed (browser, version) tuples.
+        if let Some(binary) = self.cfg.driver_paths.get(&browser).cloned() {
+            let version = format!("manual:{}", binary.display());
+            return self.spawn_or_reuse(browser, version, &binary).await;
+        }
+
         // For MatchLocalBrowser we probe the binary up front (potentially using a
         // capabilities-supplied path).
         let local = match self.cfg.version {
@@ -530,19 +536,18 @@ impl WebDriverManager {
         )
         .await?;
 
-        let key = DriverKey {
-            browser,
-            version: resolved.clone(),
-            host: self.cfg.host,
-        };
-
-        // Fast path: another live `Arc<ManagedDriver>` keyed the same way.
+        // Fast path: live driver matching `(browser, resolved, host)` already exists.
         {
+            let key = DriverKey {
+                browser,
+                version: resolved.clone(),
+                host: self.cfg.host,
+            };
             let map = self.drivers.lock().await;
             if let Some(existing) = map.get(&key).and_then(Weak::upgrade) {
                 self.emitter.emit(Status::DriverReused {
                     browser,
-                    version: resolved.clone(),
+                    version: resolved,
                     url: existing.url(),
                 });
                 return Ok(existing);
@@ -552,8 +557,37 @@ impl WebDriverManager {
         let driver_path =
             ensure_driver(&self.download_client, &download_cfg, browser, &resolved, &self.emitter)
                 .await?;
+        self.spawn_or_reuse(browser, resolved, &driver_path.binary).await
+    }
+
+    /// Cache-check, spawn, and register a managed driver process for
+    /// `(browser, version, host)`.
+    async fn spawn_or_reuse(
+        &self,
+        browser: BrowserKind,
+        version: String,
+        binary: &Path,
+    ) -> Result<Arc<ManagedDriverProcess>, ManagerError> {
+        let key = DriverKey {
+            browser,
+            version: version.clone(),
+            host: self.cfg.host,
+        };
+
+        {
+            let map = self.drivers.lock().await;
+            if let Some(existing) = map.get(&key).and_then(Weak::upgrade) {
+                self.emitter.emit(Status::DriverReused {
+                    browser,
+                    version: version.clone(),
+                    url: existing.url(),
+                });
+                return Ok(existing);
+            }
+        }
+
         let process = ManagedDriverProcess::spawn(
-            &driver_path.binary,
+            binary,
             browser,
             &SpawnConfig {
                 host: self.cfg.host,
@@ -562,7 +596,7 @@ impl WebDriverManager {
             },
             SpawnContext {
                 driver_id: self.mint_driver_id(),
-                version: &resolved,
+                version: &version,
                 emitter: &self.emitter,
                 manager_log_subscribers: self.log_subscribers.clone(),
             },
@@ -575,7 +609,7 @@ impl WebDriverManager {
         if let Some(existing) = map.get(&key).and_then(Weak::upgrade) {
             self.emitter.emit(Status::DriverReused {
                 browser,
-                version: resolved.clone(),
+                version,
                 url: existing.url(),
             });
             return Ok(existing);
