@@ -23,7 +23,7 @@ Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI 
 - Alert support
 - Capture / Save screenshot of browser or individual element as PNG
 - Chrome DevTools Protocol (CDP) support (limited)
-- Advanced query interface including explicit waits and various predicates
+- Powerful query interface (the recommended way to find elements) with explicit waits and various predicates
 - Component Wrappers (similar to `Page Object Model`)
 
 ## Feature Flags

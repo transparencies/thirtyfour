@@ -25,5 +25,5 @@ Thirty-four (34) is the atomic number for the Selenium chemical element (Se) ⚛
 - Alert support
 - Capture / Save screenshot of browser or individual element as PNG
 - Chrome DevTools Protocol (CDP) support (limited)
-- [Advanced query interface](./features/queries.md) including explicit waits and various predicates
+- [Powerful query interface](./features/queries.md) (the recommended way to find elements) with explicit waits and various predicates
 - [Component](./features/components.md) Wrappers (similar to `Page Object Model`)
