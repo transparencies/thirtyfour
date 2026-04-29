@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::Value;
@@ -7,6 +7,7 @@ use crate::Capabilities;
 use crate::common::capabilities::desiredcapabilities::CapabilitiesHelper;
 
 use super::error::ManagerError;
+use super::status::{Emitter, Status};
 
 /// Browsers the manager can drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -91,9 +92,14 @@ impl BrowserKind {
 /// Probe the locally-installed browser for its version. If `caps_binary` is
 /// supplied (i.e. user has set a custom binary path in capabilities), use that;
 /// otherwise probe a list of well-known install locations.
+///
+/// Emits [`Status::LocalBrowserDetected`] when a probe succeeds (Safari is
+/// reported with binary `/Applications/Safari.app/Contents/MacOS/Safari` for
+/// consistency, even though no probe runs).
 pub(crate) fn detect_local_version(
     browser: BrowserKind,
     caps_binary: Option<&str>,
+    emitter: &Emitter,
 ) -> Result<String, ManagerError> {
     // Safari has no real version-resolution: there's only ever one
     // `safaridriver` on the system, matched to the installed Safari.
@@ -103,6 +109,11 @@ pub(crate) fn detect_local_version(
 
     if let Some(path) = caps_binary {
         if let Some(version) = run_version(path, browser) {
+            emitter.emit(Status::LocalBrowserDetected {
+                browser,
+                version: version.clone(),
+                binary: PathBuf::from(path),
+            });
             return Ok(version);
         }
         return Err(ManagerError::LocalBrowserNotFound {
@@ -114,6 +125,11 @@ pub(crate) fn detect_local_version(
 
     for candidate in candidate_paths(browser) {
         if let Some(v) = run_version(&candidate, browser) {
+            emitter.emit(Status::LocalBrowserDetected {
+                browser,
+                version: v.clone(),
+                binary: PathBuf::from(&candidate),
+            });
             return Ok(v);
         }
     }

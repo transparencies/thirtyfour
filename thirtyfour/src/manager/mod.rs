@@ -34,6 +34,7 @@ mod error;
 #[allow(clippy::module_inception)]
 mod manager;
 mod process;
+mod status;
 mod version;
 
 #[cfg(test)]
@@ -43,4 +44,16 @@ pub use browser::BrowserKind;
 pub use error::ManagerError;
 pub use manager::{WebDriverManager, WebDriverManagerBuilder};
 pub use process::StdioMode;
+pub use status::{
+    DriverId, DriverLogLine, DriverLogSubscription, DriverStream, Status, Subscription,
+    VersionSource,
+};
 pub use version::DriverVersion;
+
+/// Crate-internal access to types that have to be reachable from `web_driver.rs`
+/// (e.g. for the typed downcast in `WebDriver::driver_id`) but should not be
+/// part of the public API.
+#[doc(hidden)]
+pub(crate) mod manager_internal {
+    pub(crate) use super::manager::SessionGuard;
+}

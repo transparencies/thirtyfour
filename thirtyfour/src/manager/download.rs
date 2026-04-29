@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use fs4::tokio::AsyncFileExt;
 use serde::Deserialize;
@@ -7,6 +7,7 @@ use url::Url;
 
 use super::browser::{BrowserKind, major};
 use super::error::ManagerError;
+use super::status::{Emitter, Status, VersionSource};
 use super::version::DriverVersion;
 
 /// Built-in upstream metadata sources.
@@ -67,10 +68,16 @@ pub(crate) async fn resolve_version(
     spec: &DriverVersion,
     local_version: Option<&str>,
     caps_version: Option<&str>,
+    emitter: &Emitter,
 ) -> Result<String, ManagerError> {
     if browser == BrowserKind::Safari {
         return Ok("system".to_string());
     }
+
+    emitter.emit(Status::DriverVersionResolving {
+        browser,
+        requested: spec.clone(),
+    });
 
     let resolve_firefox_for_browser_version = |fx: &str| -> Result<String, ManagerError> {
         geckodriver_for_firefox(fx).map(str::to_owned).ok_or_else(|| {
@@ -80,17 +87,17 @@ pub(crate) async fn resolve_version(
         })
     };
 
-    match spec {
+    let resolved = match spec {
         DriverVersion::Exact(v) => match browser {
-            BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await,
-            BrowserKind::Firefox => resolve_firefox_exact(client, cfg, v).await,
-            BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await,
+            BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await?,
+            BrowserKind::Firefox => resolve_firefox_exact(client, cfg, v).await?,
+            BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await?,
             BrowserKind::Safari => unreachable!("safari short-circuited above"),
         },
         DriverVersion::Latest => match browser {
-            BrowserKind::Chrome => fetch_chrome_latest(client, cfg).await,
-            BrowserKind::Firefox => Ok(firefox_latest_from_table().to_owned()),
-            BrowserKind::Edge => fetch_edge_latest(client, cfg).await,
+            BrowserKind::Chrome => fetch_chrome_latest(client, cfg).await?,
+            BrowserKind::Firefox => firefox_latest_from_table().to_owned(),
+            BrowserKind::Edge => fetch_edge_latest(client, cfg).await?,
             BrowserKind::Safari => unreachable!("safari short-circuited above"),
         },
         DriverVersion::MatchLocalBrowser => {
@@ -99,22 +106,29 @@ pub(crate) async fn resolve_version(
                 hint: "local version probe returned no value",
             })?;
             match browser {
-                BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await,
-                BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await,
-                BrowserKind::Firefox => resolve_firefox_for_browser_version(v),
+                BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await?,
+                BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await?,
+                BrowserKind::Firefox => resolve_firefox_for_browser_version(v)?,
                 BrowserKind::Safari => unreachable!("safari short-circuited above"),
             }
         }
         DriverVersion::FromCapabilities => {
             let v = caps_version.ok_or(ManagerError::MissingCapabilityVersion)?;
             match browser {
-                BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await,
-                BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await,
-                BrowserKind::Firefox => resolve_firefox_for_browser_version(v),
+                BrowserKind::Chrome => resolve_chrome_exact(client, cfg, v).await?,
+                BrowserKind::Edge => resolve_edge_exact(client, cfg, v).await?,
+                BrowserKind::Firefox => resolve_firefox_for_browser_version(v)?,
                 BrowserKind::Safari => unreachable!("safari short-circuited above"),
             }
         }
-    }
+    };
+
+    emitter.emit(Status::DriverVersionResolved {
+        browser,
+        version: resolved.clone(),
+        source: VersionSource::from_spec(spec),
+    });
+    Ok(resolved)
 }
 
 /// One entry in the geckodriver↔Firefox compatibility table.
@@ -368,6 +382,7 @@ pub(crate) async fn ensure_driver(
     cfg: &DownloadConfig,
     browser: BrowserKind,
     version: &str,
+    emitter: &Emitter,
 ) -> Result<DriverPath, ManagerError> {
     if browser == BrowserKind::Safari {
         return safari_driver_path();
@@ -383,6 +398,11 @@ pub(crate) async fn ensure_driver(
     let bin_path = dir.join(&bin_name);
 
     if bin_path.exists() {
+        emitter.emit(Status::DriverCacheHit {
+            browser,
+            version: version.to_string(),
+            path: bin_path.clone(),
+        });
         return Ok(DriverPath {
             binary: bin_path,
         });
@@ -414,12 +434,21 @@ pub(crate) async fn ensure_driver(
 
     // Re-check after acquiring the lock — another process may have downloaded.
     if bin_path.exists() {
+        emitter.emit(Status::DriverCacheHit {
+            browser,
+            version: version.to_string(),
+            path: bin_path.clone(),
+        });
         return Ok(DriverPath {
             binary: bin_path,
         });
     }
 
-    download_and_extract(client, cfg, browser, version, &dir).await?;
+    download_and_extract(client, cfg, browser, version, &dir, emitter).await?;
+    emitter.emit(Status::DriverArchiveExtracted {
+        browser,
+        path: bin_path.clone(),
+    });
 
     // Make the binary executable on Unix.
     #[cfg(unix)]
@@ -471,11 +500,16 @@ async fn download_and_extract(
     browser: BrowserKind,
     version: &str,
     target_dir: &Path,
+    emitter: &Emitter,
 ) -> Result<(), ManagerError> {
     match browser {
-        BrowserKind::Chrome => download_chromedriver(client, cfg, version, target_dir).await,
-        BrowserKind::Firefox => download_geckodriver(client, cfg, version, target_dir).await,
-        BrowserKind::Edge => download_msedgedriver(client, cfg, version, target_dir).await,
+        BrowserKind::Chrome => {
+            download_chromedriver(client, cfg, version, target_dir, emitter).await
+        }
+        BrowserKind::Firefox => {
+            download_geckodriver(client, cfg, version, target_dir, emitter).await
+        }
+        BrowserKind::Edge => download_msedgedriver(client, cfg, version, target_dir, emitter).await,
         BrowserKind::Safari => Err(ManagerError::Spawn(
             "Safari is system-managed; ensure_driver() should not have reached download path"
                 .into(),
@@ -488,6 +522,7 @@ async fn download_msedgedriver(
     cfg: &DownloadConfig,
     version: &str,
     target_dir: &Path,
+    emitter: &Emitter,
 ) -> Result<(), ManagerError> {
     let platform = edge_platform();
     let url = cfg
@@ -495,7 +530,15 @@ async fn download_msedgedriver(
         .edge_downloads
         .join(&format!("{version}/edgedriver_{platform}.zip"))
         .map_err(|e| ManagerError::Parse(e.to_string()))?;
-    let bytes = fetch_bytes_with_retry(client, &url, cfg.download_timeout).await?;
+    let bytes = fetch_bytes_with_retry(
+        client,
+        &url,
+        cfg.download_timeout,
+        BrowserKind::Edge,
+        version,
+        emitter,
+    )
+    .await?;
     extract_zip(&bytes, target_dir, BrowserKind::Edge)
 }
 
@@ -504,6 +547,7 @@ async fn download_chromedriver(
     cfg: &DownloadConfig,
     version: &str,
     target_dir: &Path,
+    emitter: &Emitter,
 ) -> Result<(), ManagerError> {
     let index = fetch_chrome_index(client, cfg).await?;
     let entry = index.versions.iter().find(|v| v.version == version).ok_or_else(|| {
@@ -520,7 +564,15 @@ async fn download_chromedriver(
         .url
         .parse::<Url>()
         .map_err(|e| ManagerError::Parse(format!("invalid chromedriver download URL: {e}")))?;
-    let bytes = fetch_bytes_with_retry(client, &url, cfg.download_timeout).await?;
+    let bytes = fetch_bytes_with_retry(
+        client,
+        &url,
+        cfg.download_timeout,
+        BrowserKind::Chrome,
+        version,
+        emitter,
+    )
+    .await?;
     extract_zip(&bytes, target_dir, BrowserKind::Chrome)
 }
 
@@ -532,9 +584,18 @@ async fn fetch_bytes_with_retry(
     client: &reqwest::Client,
     url: &Url,
     timeout: Duration,
+    browser: BrowserKind,
+    version: &str,
+    emitter: &Emitter,
 ) -> Result<bytes::Bytes, ManagerError> {
     const MAX_ATTEMPTS: u32 = 3;
     let mut last_err: Option<ManagerError> = None;
+    let started = Instant::now();
+    emitter.emit(Status::DriverDownloadStarted {
+        browser,
+        version: version.to_string(),
+        url: url.to_string(),
+    });
     for attempt in 0..MAX_ATTEMPTS {
         let result: Result<bytes::Bytes, ManagerError> = async {
             let resp = client
@@ -557,12 +618,20 @@ async fn fetch_bytes_with_retry(
         .await;
 
         match result {
-            Ok(b) => return Ok(b),
+            Ok(b) => {
+                emitter.emit(Status::DriverDownloadComplete {
+                    browser,
+                    version: version.to_string(),
+                    bytes: b.len() as u64,
+                    duration: started.elapsed(),
+                });
+                return Ok(b);
+            }
             Err(e @ ManagerError::Http(_)) if is_transient(&e) => {
-                tracing::debug!(
-                    "download attempt {} for {url} failed (will retry): {e}",
-                    attempt + 1
-                );
+                emitter.emit(Status::DriverDownloadRetry {
+                    attempt: attempt + 1,
+                    error: e.to_string(),
+                });
                 last_err = Some(e);
             }
             Err(e) => return Err(e),
@@ -623,9 +692,18 @@ async fn download_geckodriver(
     cfg: &DownloadConfig,
     version: &str,
     target_dir: &Path,
+    emitter: &Emitter,
 ) -> Result<(), ManagerError> {
     let url = geckodriver_download_url(cfg, version)?;
-    let bytes = fetch_bytes_with_retry(client, &url, cfg.download_timeout).await?;
+    let bytes = fetch_bytes_with_retry(
+        client,
+        &url,
+        cfg.download_timeout,
+        BrowserKind::Firefox,
+        version,
+        emitter,
+    )
+    .await?;
     if cfg!(windows) {
         extract_zip(&bytes, target_dir, BrowserKind::Firefox)
     } else {

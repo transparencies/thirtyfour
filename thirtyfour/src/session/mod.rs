@@ -16,4 +16,12 @@ pub mod scriptret;
 /// quit, so any external resources outlive the `DELETE /session` HTTP call.
 ///
 /// [`SessionHandle`]: handle::SessionHandle
-pub trait DriverGuard: Send + Sync + std::fmt::Debug + 'static {}
+pub trait DriverGuard: Send + Sync + std::fmt::Debug + 'static {
+    /// Downcast helper used by [`crate::WebDriver::driver_id`] and friends to
+    /// reach concrete guard types (e.g. the manager's `SessionGuard`). Default
+    /// returns a placeholder; types with no useful runtime info don't need to
+    /// override.
+    fn as_any(&self) -> &dyn std::any::Any {
+        &()
+    }
+}

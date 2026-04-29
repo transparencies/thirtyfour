@@ -1,5 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +12,9 @@ use tracing::{debug, warn};
 
 use super::browser::BrowserKind;
 use super::error::ManagerError;
+use super::status::{
+    DriverId, DriverLogLine, DriverLogSubscription, DriverStream, Emitter, LogSubscribers, Status,
+};
 
 /// How driver-process stdout/stderr is handled.
 #[derive(Debug, Clone, Copy, Default)]
@@ -57,6 +60,13 @@ pub(crate) struct ManagedDriverProcess {
     pub host: IpAddr,
     pub port: u16,
     pub browser: BrowserKind,
+    /// Resolved driver version; carried so `DriverShutdown` can name it.
+    pub version: String,
+    /// Synthetic identifier unique within the parent manager.
+    pub driver_id: DriverId,
+    /// Per-process log subscribers. Cloneable so [`crate::WebDriver`] can
+    /// register subscribers via the `DriverGuard` slot it already holds.
+    pub log_subscribers: LogSubscribers,
     /// `None` after `Drop` has run.
     child: Option<Child>,
     /// Set when shutdown is initiated, so the stdio pump tasks can exit cleanly.
@@ -66,6 +76,8 @@ pub(crate) struct ManagedDriverProcess {
     /// pipe semantics mean a stuck `next_line().await` would otherwise block
     /// runtime shutdown indefinitely after `start_kill`.
     pump_handles: Vec<JoinHandle<()>>,
+    /// Status emitter so `Drop` can fire `DriverShutdown`.
+    emitter: Emitter,
 }
 
 impl std::fmt::Debug for ManagedDriverProcess {
@@ -76,6 +88,16 @@ impl std::fmt::Debug for ManagedDriverProcess {
             .field("browser", &self.browser)
             .finish()
     }
+}
+
+/// Per-spawn context the manager threads in alongside the binary path.
+pub(crate) struct SpawnContext<'a> {
+    pub driver_id: DriverId,
+    pub version: &'a str,
+    pub emitter: &'a Emitter,
+    /// Manager-wide log subscribers. The newly-spawned process retains a clone
+    /// so its pump tasks can fan log lines out alongside per-process subscribers.
+    pub manager_log_subscribers: LogSubscribers,
 }
 
 impl ManagedDriverProcess {
@@ -89,12 +111,13 @@ impl ManagedDriverProcess {
         binary: &Path,
         browser: BrowserKind,
         cfg: &SpawnConfig,
+        ctx: SpawnContext<'_>,
     ) -> Result<Self, ManagerError> {
         const MAX_PORT_ATTEMPTS: u8 = 3;
         let mut last_err: Option<ManagerError> = None;
         for attempt in 0..MAX_PORT_ATTEMPTS {
             let port = pick_port(cfg.host)?;
-            match spawn_at_port(binary, browser, cfg, port).await {
+            match spawn_at_port(binary, browser, cfg, port, &ctx).await {
                 Ok(p) => return Ok(p),
                 Err(e) if is_port_in_use(&e) => {
                     debug!("driver port {port} already in use (attempt {attempt}): {e}");
@@ -109,6 +132,16 @@ impl ManagedDriverProcess {
     /// Connection URL.
     pub(crate) fn url(&self) -> String {
         format!("http://{}:{}", self.host, self.port)
+    }
+
+    /// Subscribe to log lines from just this driver process. Returns an RAII
+    /// guard whose drop unsubscribes; `mem::forget` keeps the subscriber alive
+    /// for the rest of the process's lifetime.
+    pub(crate) fn subscribe_log<F>(&self, f: F) -> DriverLogSubscription
+    where
+        F: Fn(&DriverLogLine) + Send + Sync + 'static,
+    {
+        self.log_subscribers.add(f)
     }
 }
 
@@ -131,6 +164,7 @@ async fn spawn_at_port(
     browser: BrowserKind,
     cfg: &SpawnConfig,
     port: u16,
+    ctx: &SpawnContext<'_>,
 ) -> Result<ManagedDriverProcess, ManagerError> {
     // chromedriver, geckodriver, msedgedriver, and safaridriver all accept --port=N.
     let mut cmd = Command::new(binary);
@@ -151,18 +185,48 @@ async fn spawn_at_port(
     let mut child = cmd
         .spawn()
         .map_err(|e| ManagerError::Spawn(format!("spawn {}: {}", binary.display(), e)))?;
+    let pid = child.id().unwrap_or(0);
+    ctx.emitter.emit(Status::DriverProcessSpawned {
+        browser,
+        version: ctx.version.to_string(),
+        pid,
+        port,
+        binary: PathBuf::from(binary),
+    });
 
     let shutdown = Arc::new(AtomicBool::new(false));
+    let log_subscribers = LogSubscribers::new();
     let mut pump_handles = Vec::new();
     if matches!(cfg.stdio, StdioMode::Tracing) {
+        let line_ctx = LogLineContext {
+            driver_id: ctx.driver_id,
+            browser,
+            version: ctx.version.to_string(),
+            port,
+        };
         if let Some(stdout) = child.stdout.take() {
-            pump_handles.push(spawn_pump("stdout", stdout, Arc::clone(&shutdown)));
+            pump_handles.push(spawn_pump(
+                DriverStream::Stdout,
+                stdout,
+                Arc::clone(&shutdown),
+                line_ctx.clone(),
+                log_subscribers.clone(),
+                ctx.manager_log_subscribers.clone(),
+            ));
         }
         if let Some(stderr) = child.stderr.take() {
-            pump_handles.push(spawn_pump("stderr", stderr, Arc::clone(&shutdown)));
+            pump_handles.push(spawn_pump(
+                DriverStream::Stderr,
+                stderr,
+                Arc::clone(&shutdown),
+                line_ctx,
+                log_subscribers.clone(),
+                ctx.manager_log_subscribers.clone(),
+            ));
         }
     }
 
+    let ready_started = Instant::now();
     if let Err(e) = wait_until_ready(cfg.host, port, cfg.ready_timeout).await {
         let _ = child.kill().await;
         for h in &pump_handles {
@@ -170,14 +234,25 @@ async fn spawn_at_port(
         }
         return Err(e);
     }
+    let url = format!("http://{}:{}", cfg.host, port);
+    ctx.emitter.emit(Status::DriverReady {
+        browser,
+        version: ctx.version.to_string(),
+        url,
+        elapsed: ready_started.elapsed(),
+    });
 
     Ok(ManagedDriverProcess {
         host: cfg.host,
         port,
         browser,
+        version: ctx.version.to_string(),
+        driver_id: ctx.driver_id,
+        log_subscribers,
         child: Some(child),
         shutdown,
         pump_handles,
+        emitter: ctx.emitter.clone(),
     })
 }
 
@@ -190,10 +265,30 @@ fn pick_port(host: IpAddr) -> Result<u16, ManagerError> {
     Ok(port)
 }
 
-fn spawn_pump<R>(stream: &'static str, reader: R, shutdown: Arc<AtomicBool>) -> JoinHandle<()>
+/// Context shared between every line dispatched by one pump task.
+#[derive(Clone)]
+struct LogLineContext {
+    driver_id: DriverId,
+    browser: BrowserKind,
+    version: String,
+    port: u16,
+}
+
+fn spawn_pump<R>(
+    stream: DriverStream,
+    reader: R,
+    shutdown: Arc<AtomicBool>,
+    ctx: LogLineContext,
+    process_subs: LogSubscribers,
+    manager_subs: LogSubscribers,
+) -> JoinHandle<()>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
+    let stream_label = match stream {
+        DriverStream::Stdout => "stdout",
+        DriverStream::Stderr => "stderr",
+    };
     tokio::spawn(async move {
         let mut lines = BufReader::new(reader).lines();
         loop {
@@ -202,11 +297,21 @@ where
             }
             match lines.next_line().await {
                 Ok(Some(line)) => {
-                    debug!(target: "thirtyfour::manager::driver", stream, line = %line)
+                    debug!(target: "thirtyfour::manager::driver", stream = stream_label, line = %line);
+                    let log = DriverLogLine {
+                        driver_id: ctx.driver_id,
+                        browser: ctx.browser,
+                        version: ctx.version.clone(),
+                        port: ctx.port,
+                        stream,
+                        line,
+                    };
+                    process_subs.dispatch(&log);
+                    manager_subs.dispatch(&log);
                 }
                 Ok(None) => break,
                 Err(e) => {
-                    warn!(target: "thirtyfour::manager::driver", stream, error = %e);
+                    warn!(target: "thirtyfour::manager::driver", stream = stream_label, error = %e);
                     break;
                 }
             }
@@ -259,5 +364,10 @@ impl Drop for ManagedDriverProcess {
         for h in self.pump_handles.drain(..) {
             h.abort();
         }
+        self.emitter.emit(Status::DriverShutdown {
+            browser: self.browser,
+            version: self.version.clone(),
+            port: self.port,
+        });
     }
 }

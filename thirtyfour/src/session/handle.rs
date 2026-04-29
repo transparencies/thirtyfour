@@ -111,6 +111,14 @@ impl SessionHandle {
         &self.session_id
     }
 
+    /// The opaque driver guard (if this session was launched via the manager).
+    /// Used internally by [`crate::WebDriver::driver_id`] /
+    /// [`crate::WebDriver::on_driver_log`] to reach the underlying managed
+    /// driver via [`DriverGuard::as_any`].
+    pub(crate) fn driver_guard(&self) -> Option<&Arc<dyn DriverGuard>> {
+        self.driver_guard.as_ref()
+    }
+
     /// The webdriver server URL this session is connected to.
     pub fn server_url(&self) -> &Url {
         &self.server_url

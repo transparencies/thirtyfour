@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::future::{Future, IntoFuture};
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 
@@ -23,7 +25,11 @@ use crate::web_driver::WebDriver;
 use super::browser::{BrowserKind, detect_local_version};
 use super::download::{DownloadConfig, Mirror, ensure_driver, resolve_version};
 use super::error::ManagerError;
-use super::process::{ManagedDriverProcess, SpawnConfig, StdioMode};
+use super::process::{ManagedDriverProcess, SpawnConfig, SpawnContext, StdioMode};
+use super::status::{
+    DriverId, DriverLogCallback, DriverLogLine, DriverLogSubscription, Emitter, LogSubscribers,
+    Status, StatusCallback, Subscription,
+};
 use super::version::DriverVersion;
 
 const DEFAULT_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(60);
@@ -54,6 +60,14 @@ pub struct WebDriverManager {
     download_client: reqwest::Client,
     /// Map from `(browser, resolved_version)` to a Weak handle on a live driver.
     drivers: Mutex<HashMap<DriverKey, Weak<ManagedDriverProcess>>>,
+    /// Status-event emitter (also forwards to `tracing`).
+    pub(crate) emitter: Emitter,
+    /// Manager-wide driver-log subscribers — propagated into every spawned
+    /// `ManagedDriverProcess` so subscribers added at any time see lines from
+    /// every live driver.
+    pub(crate) log_subscribers: LogSubscribers,
+    /// Monotonic counter for [`DriverId`].
+    next_driver_id: Arc<AtomicU64>,
 }
 
 impl std::fmt::Debug for WebDriverManager {
@@ -97,12 +111,47 @@ pub(super) struct DriverKey {
 
 impl DriverGuard for ManagedDriverProcess {}
 
+/// Per-session guard held by `SessionHandle::driver_guard`. Keeps the
+/// underlying [`ManagedDriverProcess`] alive for the lifetime of the session,
+/// and emits [`Status::SessionEnded`] when dropped.
+pub(crate) struct SessionGuard {
+    pub(crate) driver: Arc<ManagedDriverProcess>,
+    emitter: Emitter,
+    browser: BrowserKind,
+    session_id: String,
+}
+
+impl std::fmt::Debug for SessionGuard {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionGuard")
+            .field("browser", &self.browser)
+            .field("session_id", &self.session_id)
+            .field("driver", &self.driver)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Drop for SessionGuard {
+    fn drop(&mut self) {
+        self.emitter.emit(Status::SessionEnded {
+            browser: self.browser,
+            session_id: self.session_id.clone(),
+        });
+    }
+}
+
+impl DriverGuard for SessionGuard {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 /// Builder for [`WebDriverManager`]. The same type is used both via
 /// `WebDriverManager::builder()` and (with capabilities preloaded) via
 /// [`WebDriver::managed`]. See the [module documentation](super) for examples.
 ///
 /// [`WebDriver::managed`]: crate::WebDriver::managed
-#[derive(Debug, Clone, Default)]
+#[derive(Default)]
 pub struct WebDriverManagerBuilder {
     pub(crate) version: DriverVersion,
     pub(crate) cache_dir: Option<PathBuf>,
@@ -112,8 +161,46 @@ pub struct WebDriverManagerBuilder {
     pub(crate) offline: Option<bool>,
     pub(crate) mirror: Option<Mirror>,
     pub(crate) stdio: Option<StdioMode>,
+    /// Status subscribers registered before `build`.
+    pub(crate) status_subscribers: Vec<StatusCallback>,
+    /// Driver-log subscribers registered before `build`.
+    pub(crate) log_subscribers: Vec<DriverLogCallback>,
     /// Set when constructed via `WebDriver::managed(caps)`.
     pub(crate) preloaded_caps: Option<Capabilities>,
+}
+
+impl std::fmt::Debug for WebDriverManagerBuilder {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebDriverManagerBuilder")
+            .field("version", &self.version)
+            .field("cache_dir", &self.cache_dir)
+            .field("host", &self.host)
+            .field("download_timeout", &self.download_timeout)
+            .field("ready_timeout", &self.ready_timeout)
+            .field("offline", &self.offline)
+            .field("stdio", &self.stdio)
+            .field("status_subscribers", &self.status_subscribers.len())
+            .field("log_subscribers", &self.log_subscribers.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Clone for WebDriverManagerBuilder {
+    fn clone(&self) -> Self {
+        Self {
+            version: self.version.clone(),
+            cache_dir: self.cache_dir.clone(),
+            host: self.host,
+            download_timeout: self.download_timeout,
+            ready_timeout: self.ready_timeout,
+            offline: self.offline,
+            mirror: self.mirror.clone(),
+            stdio: self.stdio,
+            status_subscribers: self.status_subscribers.iter().map(Arc::clone).collect(),
+            log_subscribers: self.log_subscribers.iter().map(Arc::clone).collect(),
+            preloaded_caps: self.preloaded_caps.clone(),
+        }
+    }
 }
 
 impl WebDriverManagerBuilder {
@@ -213,6 +300,38 @@ impl WebDriverManagerBuilder {
         self
     }
 
+    /// Register a closure to receive every [`Status`] event emitted by the
+    /// resulting manager. Equivalent to calling
+    /// [`WebDriverManager::subscribe`] right after `build`, except the
+    /// subscriber is attached for the manager's whole lifetime — not removable.
+    ///
+    /// Registering at least one subscriber via this method opts out of the
+    /// process-wide shared singleton (see [`WebDriverManager::shared`]) so the
+    /// subscriber doesn't leak across calls of unrelated callers.
+    pub fn on_status<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&Status) + Send + Sync + 'static,
+    {
+        self.status_subscribers.push(Arc::new(f));
+        self
+    }
+
+    /// Register a closure to receive every [`DriverLogLine`] from drivers
+    /// spawned by the resulting manager. Equivalent to
+    /// [`WebDriverManager::on_driver_log`] applied right after `build`, except
+    /// the subscriber is attached for the manager's whole lifetime — not
+    /// removable.
+    ///
+    /// Registering at least one subscriber via this method opts out of the
+    /// shared singleton.
+    pub fn on_driver_log<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&DriverLogLine) + Send + Sync + 'static,
+    {
+        self.log_subscribers.push(Arc::new(f));
+        self
+    }
+
     /// Build the manager.
     pub fn build(self) -> Arc<WebDriverManager> {
         let cfg = ResolvedConfig {
@@ -225,12 +344,24 @@ impl WebDriverManagerBuilder {
             mirror: self.mirror.unwrap_or_default(),
             stdio: self.stdio.unwrap_or_default(),
         };
+        let emitter = Emitter::new();
+        for cb in self.status_subscribers {
+            // `forget` so the subscriber lives for the manager's lifetime.
+            std::mem::forget(emitter.add_arc(cb));
+        }
+        let log_subscribers = LogSubscribers::new();
+        for cb in self.log_subscribers {
+            std::mem::forget(log_subscribers.add_arc(cb));
+        }
         Arc::new(WebDriverManager {
             download_client: reqwest::Client::builder()
                 .build()
                 .expect("default reqwest client should always build"),
             cfg,
             drivers: Mutex::new(HashMap::new()),
+            emitter,
+            log_subscribers,
+            next_driver_id: Arc::new(AtomicU64::new(0)),
         })
     }
 
@@ -246,6 +377,8 @@ impl WebDriverManagerBuilder {
             && self.offline.is_none()
             && self.mirror.is_none()
             && self.stdio.is_none()
+            && self.status_subscribers.is_empty()
+            && self.log_subscribers.is_empty()
     }
 }
 
@@ -283,6 +416,33 @@ impl WebDriverManager {
         Arc::clone(shared_manager())
     }
 
+    /// Register a closure to receive every [`Status`] event emitted by this
+    /// manager. Returns an RAII guard; dropping it removes the subscriber.
+    /// `mem::forget` keeps the subscriber alive for the manager's lifetime.
+    ///
+    /// Subscribers are also forwarded to the `tracing` ecosystem under the
+    /// `thirtyfour::manager` target — they're additive, not a replacement.
+    pub fn subscribe<F>(&self, f: F) -> Subscription
+    where
+        F: Fn(&Status) + Send + Sync + 'static,
+    {
+        self.emitter.add(f)
+    }
+
+    /// Register a closure to receive every [`DriverLogLine`] from drivers
+    /// spawned (or to be spawned) by this manager. Returns an RAII guard;
+    /// dropping it removes the subscriber.
+    pub fn on_driver_log<F>(&self, f: F) -> DriverLogSubscription
+    where
+        F: Fn(&DriverLogLine) + Send + Sync + 'static,
+    {
+        self.log_subscribers.add(f)
+    }
+
+    pub(crate) fn mint_driver_id(&self) -> DriverId {
+        DriverId::from_raw(self.next_driver_id.fetch_add(1, Ordering::Relaxed))
+    }
+
     /// Spawn (or reuse) the appropriate driver and start a session.
     ///
     /// If a driver process for the same `(browser, resolved_version, host)` is
@@ -294,6 +454,7 @@ impl WebDriverManager {
     ) -> WebDriverResult<WebDriver> {
         let caps: Capabilities = capabilities.into();
         let driver = self.ensure_driver(&caps).await.map_err(WebDriverError::from)?;
+        let browser = driver.browser;
         let server_url: Url = driver
             .url()
             .parse()
@@ -302,8 +463,22 @@ impl WebDriverManager {
         let config = WebDriverConfig::default();
         let client = create_reqwest_client(config.reqwest_timeout);
         let client_arc: Arc<dyn crate::session::http::HttpClient> = Arc::new(client);
+        self.emitter.emit(Status::SessionStarting {
+            browser,
+            url: server_url.to_string(),
+        });
         let session_id = start_session(client_arc.as_ref(), &server_url, &config, caps).await?;
-        let guard: Arc<dyn DriverGuard> = driver;
+        self.emitter.emit(Status::SessionStarted {
+            browser,
+            session_id: session_id.to_string(),
+            url: server_url.to_string(),
+        });
+        let guard: Arc<dyn DriverGuard> = Arc::new(SessionGuard {
+            driver,
+            emitter: self.emitter.clone(),
+            browser,
+            session_id: session_id.to_string(),
+        });
         let handle = SessionHandle::new_with_config_and_guard(
             client_arc,
             server_url,
@@ -323,13 +498,16 @@ impl WebDriverManager {
         caps: &Capabilities,
     ) -> Result<Arc<ManagedDriverProcess>, ManagerError> {
         let browser = BrowserKind::from_capabilities(caps)?;
+        self.emitter.emit(Status::BrowserKindResolved {
+            browser,
+        });
 
         // For MatchLocalBrowser we probe the binary up front (potentially using a
         // capabilities-supplied path).
         let local = match self.cfg.version {
             DriverVersion::MatchLocalBrowser => {
                 let custom = browser.binary_from_caps(caps);
-                Some(detect_local_version(browser, custom.as_deref())?)
+                Some(detect_local_version(browser, custom.as_deref(), &self.emitter)?)
             }
             _ => None,
         };
@@ -348,6 +526,7 @@ impl WebDriverManager {
             &self.cfg.version,
             local.as_deref(),
             caps_version,
+            &self.emitter,
         )
         .await?;
 
@@ -361,12 +540,18 @@ impl WebDriverManager {
         {
             let map = self.drivers.lock().await;
             if let Some(existing) = map.get(&key).and_then(Weak::upgrade) {
+                self.emitter.emit(Status::DriverReused {
+                    browser,
+                    version: resolved.clone(),
+                    url: existing.url(),
+                });
                 return Ok(existing);
             }
         }
 
         let driver_path =
-            ensure_driver(&self.download_client, &download_cfg, browser, &resolved).await?;
+            ensure_driver(&self.download_client, &download_cfg, browser, &resolved, &self.emitter)
+                .await?;
         let process = ManagedDriverProcess::spawn(
             &driver_path.binary,
             browser,
@@ -375,6 +560,12 @@ impl WebDriverManager {
                 ready_timeout: self.cfg.ready_timeout,
                 stdio: self.cfg.stdio,
             },
+            SpawnContext {
+                driver_id: self.mint_driver_id(),
+                version: &resolved,
+                emitter: &self.emitter,
+                manager_log_subscribers: self.log_subscribers.clone(),
+            },
         )
         .await?;
 
@@ -382,6 +573,11 @@ impl WebDriverManager {
         let mut map = self.drivers.lock().await;
         // Re-check after re-locking — another caller may have raced us.
         if let Some(existing) = map.get(&key).and_then(Weak::upgrade) {
+            self.emitter.emit(Status::DriverReused {
+                browser,
+                version: resolved.clone(),
+                url: existing.url(),
+            });
             return Ok(existing);
         }
         map.insert(key, Arc::downgrade(&arc));
