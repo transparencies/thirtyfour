@@ -66,7 +66,9 @@ navigate to the "Selenium" article on Wikipedia, and then close again.
 
 The first run will take a few seconds longer than subsequent runs — `thirtyfour`
 downloads a matching `chromedriver` into your system cache directory the first time,
-then reuses it on every later run.
+then reuses it on every later run. See [WebDriver Manager](../features/manager.md)
+for the version-pinning, offline-mode, and observability options that the manager
+provides.
 
 ## Running on Firefox
 

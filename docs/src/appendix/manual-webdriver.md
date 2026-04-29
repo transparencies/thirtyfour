@@ -1,7 +1,7 @@
 # Manual WebDriver Setup
 
 This appendix covers running the webdriver yourself instead of letting
-`thirtyfour` manage it. Common reasons:
+`thirtyfour` [manage it for you](../features/manager.md). Common reasons:
 
 - You're connecting to a remote [Selenium grid](../tools/selenium.md) or
   a driver running in a container.

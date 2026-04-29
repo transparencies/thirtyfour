@@ -10,6 +10,8 @@ or Safari on macOS) installed in your operating system. `thirtyfour`
 handles the webdriver itself — it auto-downloads a compatible
 `chromedriver` / `geckodriver` / `msedgedriver` for your installed
 browser, runs it as a child process, and tears it down with your code.
+See [WebDriver Manager](../features/manager.md) for the details and
+configuration options.
 
 > Want to run the webdriver yourself instead — for example, to point
 > `thirtyfour` at a remote Selenium grid? See

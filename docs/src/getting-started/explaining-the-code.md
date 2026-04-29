@@ -31,6 +31,11 @@ The session opens the browser in a new profile (so it won't add anything to your
 history etc.) and navigates to the default start page. When the last `WebDriver`
 handle drops, the browser closes and the driver subprocess is torn down with it.
 
+See [WebDriver Manager](../features/manager.md) for everything else the manager
+can do — pinning a specific driver version, sharing one manager across many
+sessions, supplying a pre-installed driver binary, and observing what's
+happening as the manager works.
+
 > If you'd rather run the webdriver yourself — for example to point `thirtyfour` at a
 > remote Selenium grid — see [Manual WebDriver Setup](../appendix/manual-webdriver.md)
 > in the Appendix. The remaining sections work the same either way.

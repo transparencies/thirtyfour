@@ -4,12 +4,13 @@
 The `find()` and `find_all()` methods in both `WebDriver` and `WebElement` provide a simple
 way to perform direct element queries, returning a result instantly.
 
-However, for many types of queries, these methods are inadequate. For example, there is no polling, 
+However, for many types of queries, these methods are inadequate. For example, there is no polling,
 and no way to wait for something to show up on a page.
 If an element doesn't exist at the instant you look for it, you'll get an error.
 
-This isn't helpful for the majority of element queries, so `thirtyfour` provides a 
-more advanced query interface, called `ElementQuery`.
+This isn't helpful for the majority of element queries, so `thirtyfour` provides a
+more powerful query interface, called `ElementQuery`.
+We recommend using this query interface instead of the `find*()` methods.
 
 ## ElementQuery
 
