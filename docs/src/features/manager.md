@@ -1,25 +1,9 @@
-# Managed WebDriver
+# WebDriver Manager
 
-Normally, before you can use `thirtyfour` you have to download a webdriver
-binary (`chromedriver`, `geckodriver`, etc.) that matches your installed
-browser, run it on a known port, and pass that URL to `WebDriver::new(...)`.
-The `manager` feature does all of that for you: it picks a compatible driver
-version, downloads it into a cache directory, spawns it as a subprocess,
-waits for it to be ready, and tears it down when your last `WebDriver`
-handle is dropped.
-
-The `manager` feature is enabled by default. If you have disabled default
-features, re-enable it with:
-
-    [dependencies]
-    thirtyfour = { version = "THIRTYFOUR_CRATE_VERSION", features = ["manager"] }
-
-Currently supported browsers: Chrome / Chromium, Firefox, Microsoft Edge,
-and Safari (macOS only — uses the system `safaridriver`, no download).
-
-## Quick Start
-
-The simplest path is `WebDriver::managed()`:
+`thirtyfour` automatically downloads and runs the appropriate webdriver
+binary (`chromedriver`, `geckodriver`, `msedgedriver`) for your
+installed browser, so you don't have to manage the driver process
+yourself. The simple form is `WebDriver::managed()`:
 
 ```rust
 use thirtyfour::prelude::*;
@@ -33,13 +17,18 @@ async fn main() -> WebDriverResult<()> {
 }
 ```
 
-No `chromedriver` running in another terminal. No port to remember. The
-first run downloads a matching `chromedriver` into your system cache
-directory; subsequent runs reuse the cached binary.
+The first run downloads a matching driver into your system cache
+directory; subsequent runs reuse the cached binary. The driver
+subprocess starts when you create the session and is torn down when
+your last `WebDriver` handle drops.
 
-By default, the manager probes your locally installed browser, reads its
-version, and downloads a matching driver. Swap in
-`DesiredCapabilities::firefox()` to drive Firefox instead — same code path.
+Supported browsers: Chrome / Chromium, Firefox, Microsoft Edge, and
+Safari (macOS only — uses the system `safaridriver`, no download).
+
+The rest of this chapter covers what else the manager can do — version
+pinning, sharing one manager across many sessions, supplying a
+pre-installed driver binary, and observing what's happening as the
+manager works.
 
 ## Picking A Driver Version
 

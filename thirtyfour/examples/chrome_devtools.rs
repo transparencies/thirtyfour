@@ -1,6 +1,9 @@
 //! Run as follows:
 //!
 //!     cargo run --example chrome_devtools
+//!
+//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
+//! the matching `chromedriver` for your installed Chrome and starts it locally.
 
 use thirtyfour::extensions::cdp::{ChromeDevTools, NetworkConditions};
 use thirtyfour::prelude::*;
@@ -11,8 +14,7 @@ async fn main() -> color_eyre::Result<()> {
     // it much easier to locate where the error occurred.
     color_eyre::install()?;
 
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
 
     // Use Chrome Devtools Protocol (CDP).
     let dev_tools = ChromeDevTools::new(driver.handle.clone());

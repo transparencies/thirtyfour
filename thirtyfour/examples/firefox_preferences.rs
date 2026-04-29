@@ -1,6 +1,9 @@
 //! Run as follows:
 //!
 //!     cargo run --example firefox_preferences
+//!
+//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
+//! a matching `geckodriver` for your installed Firefox and starts it locally.
 
 use thirtyfour::common::capabilities::firefox::FirefoxPreferences;
 use thirtyfour::{FirefoxCapabilities, WebDriver};
@@ -20,7 +23,7 @@ async fn main() -> color_eyre::Result<()> {
     let mut caps = FirefoxCapabilities::new();
     caps.set_preferences(prefs)?;
 
-    let driver = WebDriver::new("http://localhost:4444", caps).await?;
+    let driver = WebDriver::managed(caps).await?;
     driver.goto("https://www.google.com").await?;
 
     // Get the user agent and verify.

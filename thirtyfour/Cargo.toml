@@ -102,10 +102,14 @@ tempfile = "3"
 
 [[example]]
 name = "tokio_async"
+required-features = ["manager"]
 
 [[example]]
 name = "tokio_basic"
+required-features = ["manager"]
 
+# Specifically about pointing thirtyfour at a Selenium server, so it does
+# *not* use WebDriver::managed.
 [[example]]
 name = "selenium_example"
 
@@ -114,26 +118,41 @@ name = "minimal_async"
 required-features = ["manager"]
 
 [[example]]
+name = "driver_logging"
+required-features = ["manager"]
+
+[[example]]
 name = "chrome_devtools"
+required-features = ["manager"]
 
 [[example]]
 name = "chrome_options"
+required-features = ["manager"]
+
+[[example]]
+name = "remote_debugging"
+required-features = ["manager"]
 
 [[example]]
 name = "wikipedia"
 path = "examples/query/wikipedia.rs"
+required-features = ["manager"]
 
 [[example]]
 name = "custom_poller"
 path = "examples/query/custom_poller.rs"
+required-features = ["manager"]
 
 [[example]]
 name = "firefox_preferences"
 path = "examples/firefox_preferences.rs"
+required-features = ["manager"]
 
 [[example]]
 name = "shadowroot"
+required-features = ["manager"]
 
 [[example]]
 name = "playground"
 path = "examples/components/playground.rs"
+required-features = ["manager"]

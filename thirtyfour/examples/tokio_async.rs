@@ -1,6 +1,9 @@
 //! Run as follows:
 //!
 //!     cargo run --example tokio_async
+//!
+//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
+//! the matching `chromedriver` for your installed Chrome and starts it locally.
 
 use thirtyfour::prelude::*;
 
@@ -10,8 +13,7 @@ async fn main() -> color_eyre::Result<()> {
     // it much easier to locate where the error occurred.
     color_eyre::install()?;
 
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
     // Navigate to https://wikipedia.org.
     driver.goto("https://wikipedia.org").await?;
     let elem_form = driver.find(By::Id("search-form")).await?;

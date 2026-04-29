@@ -1,17 +1,16 @@
 # Manual WebDriver Setup
 
-The default [Managed WebDriver](../features/manager.md) feature handles
-downloading and running the appropriate webdriver subprocess for you. This
-appendix is for the cases where you want to do it yourself:
+This appendix covers running the webdriver yourself instead of letting
+`thirtyfour` manage it. Common reasons:
 
-- You have disabled the `manager` feature.
-- You're connecting to an externally-managed driver server, like a remote
-  [Selenium grid](../tools/selenium.md) or a driver running in a container.
+- You're connecting to a remote [Selenium grid](../tools/selenium.md) or
+  a driver running in a container.
 - You want a long-lived driver process you can reuse across many runs of
   your program.
+- You've disabled the `manager` Cargo feature to slim your build.
 
-In any of these scenarios you'll need to download the webdriver binary,
-start it on a known port, and pass that URL to `WebDriver::new(...)`.
+In any of these cases you'll need to download a webdriver binary, start
+it on a known port, and pass that URL to `WebDriver::new(...)`.
 
 ## Downloading A WebDriver Binary
 
@@ -27,11 +26,10 @@ The webdriver may be zipped. Unzip it and place the binary somewhere in
 your `PATH`. Make sure it is executable and that you have permission to
 run it.
 
-> If the webdriver is not the right version for your browser, it will
-> show an error message when you try to start a new session using
-> `thirtyfour`. Browser auto-updates are a common cause; the
-> [Managed WebDriver](../features/manager.md) feature exists in part to
-> sidestep this problem.
+> Make sure the webdriver version matches the version of the browser you
+> have installed. If they don't match, the driver returns an error when
+> you try to start a session. Browser auto-updates are a common cause of
+> drift here.
 
 ## Starting The WebDriver
 

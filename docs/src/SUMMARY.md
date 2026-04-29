@@ -11,7 +11,7 @@
 - [Element Queries](./features/queries.md)
 - [Waiting For Element Changes](./features/waiting.md)
 - [Components](./features/components.md)
-- [Managed WebDriver](./features/manager.md)
+- [WebDriver Manager](./features/manager.md)
 # Useful Tools
 - [Selenium](./tools/selenium.md)
 # Contributing

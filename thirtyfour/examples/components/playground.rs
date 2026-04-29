@@ -1,6 +1,9 @@
 //! Run as follows:
 //!
-//!     cargo run --example wikipedia
+//!     cargo run --example playground
+//!
+//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
+//! the matching `chromedriver` for your installed Chrome and starts it locally.
 
 use std::time::Duration;
 
@@ -16,8 +19,7 @@ use thirtyfour::{
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
-    let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:9515", caps).await?;
+    let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
     driver.goto("https://play.rust-lang.org").await?;
 
     let base_elem = driver.query(By::Id("playground")).single().await?;
