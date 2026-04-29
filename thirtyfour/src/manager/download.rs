@@ -422,15 +422,14 @@ pub(crate) async fn ensure_driver(
     // download+extract, so concurrent test processes don't race the same cache
     // entry. The lock is released when `lock_file` drops at end of scope.
     //
-    // `AsyncFileExt::lock_exclusive` is sync under the hood (it calls flock /
+    // `AsyncFileExt::lock` is sync under the hood (it calls flock /
     // LockFileEx) — it briefly blocks this executor thread while waiting. Hold
     // time is bounded by download+extract; contention only happens between
     // concurrent test processes touching the same cache entry.
     let lock_file = tokio::fs::File::create(&lock_path)
         .await
         .map_err(|e| ManagerError::Lock(format!("create lock: {e}")))?;
-    AsyncFileExt::lock_exclusive(&lock_file)
-        .map_err(|e| ManagerError::Lock(format!("acquire: {e}")))?;
+    AsyncFileExt::lock(&lock_file).map_err(|e| ManagerError::Lock(format!("acquire: {e}")))?;
 
     // Re-check after acquiring the lock — another process may have downloaded.
     if bin_path.exists() {
