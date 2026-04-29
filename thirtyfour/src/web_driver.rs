@@ -185,6 +185,46 @@ impl WebDriver {
         builder
     }
 
+    /// Identifier of the driver process serving this session, if it was
+    /// launched via [`WebDriverManager`]. Returns `None` for sessions
+    /// constructed with [`WebDriver::new`] (i.e. talking to an externally-
+    /// managed driver server).
+    ///
+    /// This identifier matches the [`DriverLogLine::driver_id`] field on log
+    /// events emitted via [`WebDriverManager::on_driver_log`], so a closure
+    /// registered manager-wide can filter to "just this session's driver".
+    ///
+    /// [`WebDriverManager`]: crate::manager::WebDriverManager
+    /// [`DriverLogLine::driver_id`]: crate::manager::DriverLogLine
+    /// [`WebDriverManager::on_driver_log`]: crate::manager::WebDriverManager::on_driver_log
+    #[cfg(feature = "manager")]
+    pub fn driver_id(&self) -> Option<crate::manager::DriverId> {
+        let guard = self.handle.driver_guard()?;
+        let session_guard =
+            guard.as_any().downcast_ref::<crate::manager::manager_internal::SessionGuard>()?;
+        Some(session_guard.driver.driver_id)
+    }
+
+    /// Subscribe to log lines from just this session's driver process. Returns
+    /// `None` if this session wasn't launched via [`WebDriverManager`];
+    /// otherwise an RAII subscription whose drop unsubscribes.
+    ///
+    /// Lines also continue flowing to any subscribers attached at the manager
+    /// level (via [`WebDriverManager::on_driver_log`]).
+    ///
+    /// [`WebDriverManager`]: crate::manager::WebDriverManager
+    /// [`WebDriverManager::on_driver_log`]: crate::manager::WebDriverManager::on_driver_log
+    #[cfg(feature = "manager")]
+    pub fn on_driver_log<F>(&self, f: F) -> Option<crate::manager::DriverLogSubscription>
+    where
+        F: Fn(&crate::manager::DriverLogLine) + Send + Sync + 'static,
+    {
+        let guard = self.handle.driver_guard()?;
+        let session_guard =
+            guard.as_any().downcast_ref::<crate::manager::manager_internal::SessionGuard>()?;
+        Some(session_guard.driver.subscribe_log(f))
+    }
+
     /// End the webdriver session and close the browser.
     ///
     /// **NOTE:** Although `WebDriver` does close when all instances go out of scope.

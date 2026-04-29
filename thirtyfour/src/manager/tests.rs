@@ -1,5 +1,6 @@
 //! Tests that exercise the manager beyond the per-module unit tests.
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::json;
@@ -13,6 +14,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use super::browser::BrowserKind;
 use super::download::{DownloadConfig, Mirror, resolve_version};
 use super::manager::DriverKey;
+use super::status::{DriverLogLine, Emitter, LogSubscribers, Status};
 use super::version::DriverVersion;
 use super::{StdioMode, WebDriverManager};
 use crate::Capabilities;
@@ -157,9 +159,18 @@ async fn resolve_version_latest_chrome() {
     };
 
     let client = reqwest::Client::new();
-    let v = resolve_version(&client, &cfg, BrowserKind::Chrome, &DriverVersion::Latest, None, None)
-        .await
-        .unwrap();
+    let emitter = Emitter::new();
+    let v = resolve_version(
+        &client,
+        &cfg,
+        BrowserKind::Chrome,
+        &DriverVersion::Latest,
+        None,
+        None,
+        &emitter,
+    )
+    .await
+    .unwrap();
     assert_eq!(v, "126.0.6478.126");
 }
 
@@ -189,6 +200,7 @@ async fn resolve_version_exact_chrome_major_picks_latest_in_index() {
     };
 
     let client = reqwest::Client::new();
+    let emitter = Emitter::new();
     let v = resolve_version(
         &client,
         &cfg,
@@ -196,6 +208,7 @@ async fn resolve_version_exact_chrome_major_picks_latest_in_index() {
         &DriverVersion::Exact("126".into()),
         None,
         None,
+        &emitter,
     )
     .await
     .unwrap();
@@ -211,6 +224,7 @@ async fn from_capabilities_errors_when_caps_missing_version() {
         offline: false,
     };
     let client = reqwest::Client::new();
+    let emitter = Emitter::new();
     let err = resolve_version(
         &client,
         &cfg,
@@ -218,8 +232,171 @@ async fn from_capabilities_errors_when_caps_missing_version() {
         &DriverVersion::FromCapabilities,
         None,
         None,
+        &emitter,
     )
     .await
     .unwrap_err();
     assert!(matches!(err, super::ManagerError::MissingCapabilityVersion));
+}
+
+// ---- Status / subscriber tests ----
+
+#[tokio::test]
+async fn resolve_version_emits_resolving_then_resolved() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/chrome-for-testing/LATEST_RELEASE_STABLE"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("126.0.6478.126"))
+        .mount(&server)
+        .await;
+
+    let cfg = DownloadConfig {
+        cache_dir: std::env::temp_dir(),
+        mirror: Mirror {
+            chrome_metadata: format!("{}/", server.uri()).parse().unwrap(),
+            ..Mirror::default()
+        },
+        download_timeout: Duration::from_secs(5),
+        offline: false,
+    };
+
+    let recorded: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let emitter = Emitter::new();
+    let r = Arc::clone(&recorded);
+    let _sub = emitter.add(move |s| match s {
+        Status::DriverVersionResolving {
+            ..
+        } => r.lock().unwrap().push("resolving".to_string()),
+        Status::DriverVersionResolved {
+            version,
+            ..
+        } => r.lock().unwrap().push(format!("resolved:{version}")),
+        _ => {}
+    });
+
+    let client = reqwest::Client::new();
+    resolve_version(
+        &client,
+        &cfg,
+        BrowserKind::Chrome,
+        &DriverVersion::Latest,
+        None,
+        None,
+        &emitter,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(*recorded.lock().unwrap(), vec!["resolving", "resolved:126.0.6478.126"]);
+}
+
+#[test]
+fn builder_with_status_subscriber_opts_out_of_shared_singleton() {
+    // Two consecutive `WebDriver::managed(caps)` calls without options share
+    // the singleton. Once we register an `on_status` subscriber, we must opt
+    // out of the singleton so the subscriber doesn't leak across unrelated
+    // callers.
+    let mut caps = Capabilities::new();
+    caps.insert("browserName".into(), json!("chrome"));
+
+    // Sanity: bare builder is_all_defaults — covered indirectly by the shared
+    // singleton path.
+    let bare = WebDriverManager::builder();
+    assert!(bare.preloaded_caps.is_none());
+
+    // With a status subscriber, is_all_defaults should be false. We reach that
+    // through the public API: build the manager twice and ensure the Arcs
+    // differ. (`shared()` reuses; a non-shared build returns a fresh Arc each
+    // time.)
+    let log = Arc::new(Mutex::new(Vec::<String>::new()));
+    let captured = Arc::clone(&log);
+    let m1 = WebDriverManager::builder()
+        .on_status(move |s| captured.lock().unwrap().push(s.to_string()))
+        .build();
+    let captured2 = Arc::clone(&log);
+    let m2 = WebDriverManager::builder()
+        .on_status(move |s| captured2.lock().unwrap().push(s.to_string()))
+        .build();
+    assert!(!std::sync::Arc::ptr_eq(&m1, &m2), "subscriber-bearing builders must not share state");
+
+    // And the subscriber receives manually-emitted events.
+    m1.emitter.emit(Status::BrowserKindResolved {
+        browser: BrowserKind::Chrome,
+    });
+    assert_eq!(log.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn manager_subscribe_returns_raii_guard() {
+    let mgr = WebDriverManager::builder().build();
+    let log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
+    let captured = Arc::clone(&log);
+    let sub = mgr.subscribe(move |s| captured.lock().unwrap().push(s.to_string()));
+
+    mgr.emitter.emit(Status::BrowserKindResolved {
+        browser: BrowserKind::Chrome,
+    });
+    assert_eq!(log.lock().unwrap().len(), 1);
+
+    drop(sub);
+    mgr.emitter.emit(Status::BrowserKindResolved {
+        browser: BrowserKind::Firefox,
+    });
+    assert_eq!(
+        log.lock().unwrap().len(),
+        1,
+        "events emitted after subscription drop must not be observed"
+    );
+}
+
+#[test]
+fn driver_logs_fan_out_to_per_process_and_manager_subscribers() {
+    // Simulate the dispatch path that `spawn_pump` uses: a per-process
+    // `LogSubscribers` and a manager-wide one. Lines pushed through both
+    // should reach both subscribers, and each subscription drop is independent.
+    let process_subs = LogSubscribers::new();
+    let manager_subs = LogSubscribers::new();
+
+    let process_log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let manager_log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
+    let p = Arc::clone(&process_log);
+    let process_sub = process_subs.add(move |line| p.lock().unwrap().push(line.line.clone()));
+    let m = Arc::clone(&manager_log);
+    let manager_sub = manager_subs.add(move |line| m.lock().unwrap().push(line.line.clone()));
+
+    let line = DriverLogLine {
+        driver_id: super::status::DriverId::from_raw(1),
+        browser: BrowserKind::Chrome,
+        version: "126".to_string(),
+        port: 51234,
+        stream: super::status::DriverStream::Stdout,
+        line: "first".to_string(),
+    };
+    process_subs.dispatch(&line);
+    manager_subs.dispatch(&line);
+    assert_eq!(process_log.lock().unwrap().as_slice(), &["first"]);
+    assert_eq!(manager_log.lock().unwrap().as_slice(), &["first"]);
+
+    // Drop the per-process subscription — manager-wide one keeps receiving.
+    drop(process_sub);
+    let line2 = DriverLogLine {
+        line: "second".to_string(),
+        ..line.clone()
+    };
+    process_subs.dispatch(&line2);
+    manager_subs.dispatch(&line2);
+    assert_eq!(process_log.lock().unwrap().len(), 1, "dropped per-process sub must stop");
+    assert_eq!(manager_log.lock().unwrap().as_slice(), &["first", "second"]);
+
+    // Drop the manager-wide subscription — both stop.
+    drop(manager_sub);
+    let line3 = DriverLogLine {
+        line: "third".to_string(),
+        ..line.clone()
+    };
+    process_subs.dispatch(&line3);
+    manager_subs.dispatch(&line3);
+    assert_eq!(manager_log.lock().unwrap().len(), 2);
 }
