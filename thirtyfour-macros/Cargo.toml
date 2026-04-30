@@ -9,6 +9,7 @@ documentation = "https://docs.rs/thirtyfour_macros"
 readme = "README.md"
 authors.workspace = true
 license.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
