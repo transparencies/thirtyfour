@@ -36,7 +36,9 @@
 //! ## Example
 //!
 //! The following example assumes you have a compatible version of Chrome
-//! installed and `chromedriver` running on port 4444.
+//! installed. [`WebDriver::managed`] auto-downloads the matching
+//! `chromedriver`, starts it locally, and shuts it down when the session is
+//! dropped.
 //!
 //! ```no_run
 //! use thirtyfour::prelude::*;
@@ -44,7 +46,7 @@
 //! #[tokio::main]
 //! async fn main() -> color_eyre::Result<()> {
 //!     let caps = DesiredCapabilities::chrome();
-//!     let driver = WebDriver::new("http://localhost:4444", caps).await?;
+//!     let driver = WebDriver::managed(caps).await?;
 //!
 //!     // Navigate to https://wikipedia.org.
 //!     driver.goto("https://wikipedia.org").await?;

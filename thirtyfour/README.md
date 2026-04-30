@@ -44,7 +44,7 @@ use thirtyfour::prelude::*;
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
      let caps = DesiredCapabilities::chrome();
-     let driver = WebDriver::new("http://localhost:9515", caps).await?;
+     let driver = WebDriver::managed(caps).await?;
 
      // Navigate to https://wikipedia.org.
      driver.goto("https://wikipedia.org").await?;
