@@ -1,0 +1,69 @@
+on:
+  push:
+    branches: [main]
+    # CDP tests download a real chromedriver and exercise the typed + WS
+    # CDP layers. Trigger on changes to anything that could affect them.
+    paths:
+      - 'thirtyfour/src/cdp/**'
+      - 'thirtyfour/tests/cdp_typed.rs'
+      - 'thirtyfour/tests/cdp_events.rs'
+      - 'thirtyfour/src/extensions/cdp/**'
+      - 'thirtyfour/src/web_driver.rs'
+      - 'thirtyfour/src/web_element.rs'
+      - 'thirtyfour/src/session/**'
+      - 'thirtyfour/Cargo.toml'
+      - '.github/workflows/cdp-test.yml'
+  pull_request:
+    paths:
+      - 'thirtyfour/src/cdp/**'
+      - 'thirtyfour/tests/cdp_typed.rs'
+      - 'thirtyfour/tests/cdp_events.rs'
+      - 'thirtyfour/src/extensions/cdp/**'
+      - 'thirtyfour/src/web_driver.rs'
+      - 'thirtyfour/src/web_element.rs'
+      - 'thirtyfour/src/session/**'
+      - 'thirtyfour/Cargo.toml'
+      - '.github/workflows/cdp-test.yml'
+name: cargo test (cdp)
+jobs:
+  # CDP via the WebDriver vendor endpoint `goog/cdp/execute` is Chromium-only.
+  # Edge would also work (msedgedriver wraps chromedriver) but adds runner cost
+  # for negligible coverage gain — chrome on three OSes already exercises the
+  # whole code path.
+  cdp-typed:
+    runs-on: ${{ matrix.os }}
+    name: cdp typed / ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - uses: actions/checkout@v2
+      - name: cargo test (cdp_typed)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p thirtyfour --features manager-tests --test cdp_typed -- --test-threads=1
+  # `cdp-events` adds the WebSocket transport + tokio-tungstenite. Run on
+  # ubuntu only — the WS connect path is OS-agnostic, so per-OS coverage
+  # would just add CI time.
+  cdp-events:
+    runs-on: ubuntu-latest
+    name: cdp events / ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - uses: actions/checkout@v2
+      - name: cargo test (cdp_events)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p thirtyfour --features manager-tests,cdp-events --test cdp_events -- --test-threads=1

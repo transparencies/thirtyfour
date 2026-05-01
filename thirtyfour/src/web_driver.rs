@@ -115,9 +115,16 @@ impl WebDriver {
             .map_err(|e| WebDriverError::ParseError(format!("invalid url: {e}")))?;
 
         let client = Arc::new(client);
-        let session_id = start_session(client.as_ref(), &server_url, &config, capabilities).await?;
+        let started = start_session(client.as_ref(), &server_url, &config, capabilities).await?;
 
-        let handle = SessionHandle::new_with_config(client, server_url, session_id, config)?;
+        let handle = SessionHandle::new_with_config_guard_and_caps(
+            client,
+            server_url,
+            started.session_id,
+            config,
+            None,
+            started.capabilities,
+        )?;
         Ok(Self {
             handle: Arc::new(handle),
         })
@@ -174,6 +181,32 @@ impl WebDriver {
         let mut builder = crate::manager::WebDriverManager::builder();
         builder.preloaded_caps = Some(capabilities.into());
         builder
+    }
+
+    /// Get a Chrome DevTools Protocol handle for this session.
+    ///
+    /// Cheap to call (just clones the underlying `Arc<SessionHandle>`).
+    /// Works on any Chromium-based driver session (chromedriver,
+    /// msedgedriver, Brave, Opera, etc.) — non-Chromium drivers will return
+    /// errors when CDP commands are issued.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use thirtyfour::prelude::*;
+    /// # async fn run() -> WebDriverResult<()> {
+    /// let driver = WebDriver::new("http://localhost:4444", DesiredCapabilities::chrome()).await?;
+    /// let info = driver.cdp().browser().get_version().await?;
+    /// println!("user agent: {}", info.user_agent);
+    /// # driver.quit().await }
+    /// ```
+    ///
+    /// For event subscription, upgrade to [`crate::cdp::CdpSession`] via
+    /// [`Cdp::connect`] (feature `cdp-events`).
+    ///
+    /// [`Cdp::connect`]: crate::cdp::Cdp::connect
+    #[cfg(feature = "cdp")]
+    pub fn cdp(&self) -> crate::cdp::Cdp {
+        crate::cdp::Cdp::new(self.handle.clone())
     }
 
     /// Identifier of the driver process serving this session, if it was

@@ -23,7 +23,10 @@
 //! - Shadow DOM support
 //! - Alert support
 //! - Capture / Save screenshot of browser or individual element as PNG
-//! - Some Chrome DevTools Protocol (CDP) support
+//! - Chrome DevTools Protocol (CDP) — typed commands via [`WebDriver::cdp`]
+//!   (feature `cdp`, on by default), plus optional WebSocket-based event
+//!   subscription via the `cdp-events` feature. See the [`cdp`] module for
+//!   details.
 //! - Powerful query interface (the recommended way to find elements) with explicit waits and various predicates
 //! - Component Wrappers (similar to `Page Object Model`)
 //!
@@ -32,6 +35,11 @@
 //! * `rustls-tls`: (Default) Use rustls to provide TLS support (via reqwest).
 //! * `native-tls`: Use native TLS (via reqwest).
 //! * `component`: (Default) Enable the `Component` derive macro (via thirtyfour-macros).
+//! * `cdp`: (Default) Typed Chrome DevTools Protocol commands via
+//!   [`WebDriver::cdp`] / [`WebElement::cdp_remote_object_id`] /
+//!   [`WebElement::cdp_backend_node_id`].
+//! * `cdp-events`: WebSocket-backed CDP event subscription. Enables
+//!   [`cdp::CdpSession`] and pulls in `tokio-tungstenite`. Off by default.
 //!
 //! ## Example
 //!
@@ -194,6 +202,10 @@ pub mod prelude {
 pub mod action_chain;
 /// Alert handling.
 pub mod alert;
+/// Chrome DevTools Protocol (CDP) support — typed commands, optional event
+/// subscription via WebSocket. See [`cdp`] for the API.
+#[cfg(feature = "cdp")]
+pub mod cdp;
 /// Common wrappers used by both async and sync implementations.
 pub mod common;
 /// Components and component wrappers.

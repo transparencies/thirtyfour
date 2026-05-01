@@ -5,6 +5,11 @@ use http::Method;
 use serde_json::{Value, json};
 
 /// Extra commands specific to Chrome.
+///
+/// **Deprecated.** Use [`crate::cdp::Cdp`] for the standard CDP path; cast
+/// and `launch_app` are vendor-specific and not CDP — those will be kept on
+/// the legacy helper until/unless they're moved elsewhere.
+#[deprecated(since = "0.37.0", note = "use thirtyfour::cdp::Cdp")]
 #[derive(Debug)]
 pub enum ChromeCommand {
     /// Launch the specified Chrome app.

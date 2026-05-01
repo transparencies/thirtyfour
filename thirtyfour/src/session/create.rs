@@ -13,6 +13,18 @@ use crate::{
     session::http::run_webdriver_cmd,
 };
 
+/// Result of [`start_session`]: the session id assigned by the server, plus
+/// the capabilities map the server returned (used for CDP WebSocket URL
+/// discovery, BiDi, etc.).
+#[derive(Debug)]
+pub struct StartedSession {
+    /// Session id assigned by the WebDriver server.
+    pub session_id: SessionId,
+    /// Capabilities returned by `New Session`. May be empty if the server
+    /// returned an unrecognised shape.
+    pub capabilities: Capabilities,
+}
+
 /// Start a new WebDriver session, returning the session id and the
 /// capabilities JSON that was received back from the server.
 pub async fn start_session(
@@ -20,7 +32,7 @@ pub async fn start_session(
     server_url: &Url,
     config: &WebDriverConfig,
     capabilities: Capabilities,
-) -> WebDriverResult<SessionId> {
+) -> WebDriverResult<StartedSession> {
     let request_data = Command::NewSession(serde_json::Value::Object(capabilities))
         .format_request(&SessionId::null());
 
@@ -46,8 +58,8 @@ pub async fn start_session(
     struct ConnectionData {
         #[serde(default, rename(deserialize = "sessionId"))]
         session_id: String,
-        // #[serde(default)]
-        // capabilities: serde_json::Value,
+        #[serde(default)]
+        capabilities: serde_json::Value,
     }
 
     #[derive(Debug, Deserialize)]
@@ -64,11 +76,18 @@ pub async fn start_session(
     } else {
         resp.session_id
     });
+    let capabilities = match data.capabilities {
+        serde_json::Value::Object(map) => map,
+        _ => Capabilities::new(),
+    };
 
     // Set default timeouts.
     let request_data =
         Command::SetTimeouts(TimeoutConfiguration::default()).format_request(&session_id);
     run_webdriver_cmd(http_client, &request_data, server_url, config).await?;
 
-    Ok(session_id)
+    Ok(StartedSession {
+        session_id,
+        capabilities,
+    })
 }
