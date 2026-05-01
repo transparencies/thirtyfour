@@ -33,20 +33,15 @@ pub struct RemoteObject {
     /// Object type (`"object"`, `"function"`, `"undefined"`, `"string"`, `"number"`, `"boolean"`, `"symbol"`, `"bigint"`).
     pub r#type: String,
     /// Object subtype hint, only set for objects (e.g. `"array"`, `"node"`, `"date"`).
-    #[serde(default)]
     pub subtype: Option<String>,
     /// Object class name (e.g. `"HTMLElement"`).
-    #[serde(default)]
     pub class_name: Option<String>,
     /// Remote object value, when the value is serialisable.
-    #[serde(default)]
     pub value: Option<Value>,
     /// Description (textual representation).
-    #[serde(default)]
     pub description: Option<String>,
     /// Unique identifier (object handle). Use [`Runtime.releaseObject`](ReleaseObject)
     /// when no longer needed.
-    #[serde(default)]
     pub object_id: Option<RemoteObjectId>,
 }
 
@@ -108,19 +103,14 @@ pub struct ExceptionDetails {
     /// Column number of the exception location (0-based).
     pub column_number: u32,
     /// Script id of the exception location.
-    #[serde(default)]
     pub script_id: Option<ScriptId>,
     /// URL of the exception location.
-    #[serde(default)]
     pub url: Option<String>,
     /// Stack trace if available.
-    #[serde(default)]
     pub stack_trace: Option<Value>,
     /// The thrown exception object.
-    #[serde(default)]
     pub exception: Option<RemoteObject>,
     /// Execution context id.
-    #[serde(default)]
     pub execution_context_id: Option<ExecutionContextId>,
 }
 
@@ -131,7 +121,6 @@ pub struct EvaluationResult {
     /// Evaluation result.
     pub result: RemoteObject,
     /// Exception details, if the evaluation threw.
-    #[serde(default)]
     pub exception_details: Option<ExceptionDetails>,
 }
 

@@ -53,19 +53,16 @@ pub struct DomNode {
     #[serde(default)]
     pub node_value: String,
     /// Child node count.
-    #[serde(default)]
     pub child_node_count: Option<u32>,
     /// Children (when included).
-    #[serde(default)]
     pub children: Option<Vec<DomNode>>,
     /// Attributes (interleaved name/value pairs).
-    #[serde(default)]
     pub attributes: Option<Vec<String>>,
     /// Document URL (for the document node). CDP uses SCREAMING `URL`.
-    #[serde(default, rename = "documentURL")]
+    #[serde(rename = "documentURL")]
     pub document_url: Option<String>,
     /// Base URL. CDP uses SCREAMING `URL`.
-    #[serde(default, rename = "baseURL")]
+    #[serde(rename = "baseURL")]
     pub base_url: Option<String>,
 }
 

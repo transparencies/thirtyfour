@@ -84,10 +84,8 @@ pub struct TargetInfo {
     /// Whether the target is currently attached.
     pub attached: bool,
     /// Browser context id.
-    #[serde(default)]
     pub browser_context_id: Option<BrowserContextId>,
     /// Opener id.
-    #[serde(default)]
     pub opener_id: Option<TargetId>,
 }
 /// Response for [`GetTargets`].
@@ -167,7 +165,6 @@ pub struct DetachedFromTarget {
     /// Session id of the detachment.
     pub session_id: SessionId,
     /// Target id of the detached target.
-    #[serde(default)]
     pub target_id: Option<TargetId>,
 }
 impl CdpEvent for DetachedFromTarget {

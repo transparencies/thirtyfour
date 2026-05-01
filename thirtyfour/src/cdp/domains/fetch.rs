@@ -133,16 +133,12 @@ pub struct RequestPaused {
     /// Resource type.
     pub resource_type: String,
     /// Response error reason if intercepted at the response stage.
-    #[serde(default)]
     pub response_error_reason: Option<String>,
     /// Response status code if intercepted at the response stage.
-    #[serde(default)]
     pub response_status_code: Option<u32>,
     /// Response status text if intercepted at the response stage.
-    #[serde(default)]
     pub response_status_text: Option<String>,
     /// Response headers if intercepted at the response stage.
-    #[serde(default)]
     pub response_headers: Option<Vec<HeaderEntry>>,
 }
 impl CdpEvent for RequestPaused {

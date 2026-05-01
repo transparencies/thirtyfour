@@ -273,7 +273,6 @@ pub struct LoadingFailed {
     /// User-friendly error message.
     pub error_text: String,
     /// Whether the loading was canceled.
-    #[serde(default)]
     pub canceled: Option<bool>,
 }
 impl CdpEvent for LoadingFailed {

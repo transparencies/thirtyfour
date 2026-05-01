@@ -45,10 +45,8 @@ pub struct LogEntry {
     /// Timestamp of the entry.
     pub timestamp: f64,
     /// URL of the resource if known.
-    #[serde(default)]
     pub url: Option<String>,
     /// Line number of the entry in the resource.
-    #[serde(default)]
     pub line_number: Option<u32>,
 }
 

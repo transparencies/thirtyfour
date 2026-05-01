@@ -59,7 +59,6 @@ impl fmt::Display for CdpError {
 pub(crate) struct CdpErrorEnvelope {
     pub code: i32,
     pub message: String,
-    #[serde(default)]
     pub data: Option<Value>,
 }
 

@@ -59,10 +59,8 @@ pub struct NavigateResult {
     /// Frame id that was navigated.
     pub frame_id: FrameId,
     /// Loader id of the navigation. `None` for fragment navigations.
-    #[serde(default)]
     pub loader_id: Option<LoaderId>,
     /// User-friendly error message if navigation failed.
-    #[serde(default)]
     pub error_text: Option<String>,
 }
 
@@ -208,7 +206,6 @@ pub struct FrameNavigated {
     /// Frame description after navigation.
     pub frame: serde_json::Value,
     /// Type of navigation: `"Navigation"` or `"BackForwardCacheRestore"`.
-    #[serde(default)]
     pub r#type: Option<String>,
 }
 impl CdpEvent for FrameNavigated {
