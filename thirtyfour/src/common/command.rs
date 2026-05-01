@@ -70,6 +70,39 @@ pub enum BySelector {
 }
 
 /// Element Selector struct providing a convenient way to specify selectors.
+///
+/// # Scope when querying from a [`WebElement`]
+///
+/// When you call `find` / `find_all` / `query` on a [`WebElement`] (rather
+/// than on a [`WebDriver`]), thirtyfour issues `Find Element From Element`
+/// and the search is **scoped to the element's subtree** — except for
+/// [`By::XPath`], see below.
+///
+/// All other variants (`Id`, `Name`, `Tag`, `ClassName`, `Css`, `Testid`,
+/// `LinkText`, `PartialLinkText`) are forwarded as CSS selectors, which the
+/// WebDriver spec runs against the element's descendants only.
+///
+/// # XPath gotcha
+///
+/// XPath `//foo` is **document-rooted**, even when called from a
+/// [`WebElement`]. To search relative to the element you queried from, use
+/// `.//foo`:
+///
+/// ```rust,no_run
+/// # use thirtyfour::prelude::*;
+/// # async fn _scope(parent: WebElement) -> WebDriverResult<()> {
+/// // Wrong — searches the whole document, may match elements outside `parent`.
+/// let _ = parent.find(By::XPath("//div[@class='child']")).await?;
+/// // Right — searches only inside `parent`.
+/// let _ = parent.find(By::XPath(".//div[@class='child']")).await?;
+/// # Ok(()) }
+/// ```
+///
+/// This is W3C WebDriver behaviour, not a thirtyfour quirk — it matches
+/// every other Selenium-family client.
+///
+/// [`WebDriver`]: crate::WebDriver
+/// [`WebElement`]: crate::WebElement
 #[derive(Debug, Clone)]
 pub struct By {
     selector: BySelector,
@@ -106,6 +139,13 @@ impl By {
     }
 
     /// Select element by XPath.
+    ///
+    /// When called from a [`WebElement`], remember to prefix paths with
+    /// `.//` to scope the search to the element's subtree — `//foo` is
+    /// document-rooted regardless of which element you query from. See the
+    /// [`By`] type-level docs for the full explanation.
+    ///
+    /// [`WebElement`]: crate::WebElement
     pub fn XPath(x: impl IntoArcStr) -> Self {
         Self {
             selector: BySelector::XPath(x.into()),
