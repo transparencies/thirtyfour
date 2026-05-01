@@ -13,7 +13,6 @@ use tokio::sync::Mutex;
 use url::Url;
 
 use crate::Capabilities;
-use crate::common::capabilities::desiredcapabilities::CapabilitiesHelper;
 use crate::common::config::WebDriverConfig;
 use crate::error::{WebDriverError, WebDriverResult};
 use crate::session::DriverGuard;
@@ -458,7 +457,7 @@ impl WebDriverManager {
             .map_err(|e| WebDriverError::ParseError(format!("invalid driver url: {e}")))?;
 
         let config = WebDriverConfig::default();
-        let client = create_reqwest_client(config.reqwest_timeout);
+        let client = create_reqwest_client(config.request_timeout);
         let client_arc: Arc<dyn crate::session::http::HttpClient> = Arc::new(client);
         self.emitter.emit(Status::SessionStarting {
             browser,
@@ -519,7 +518,7 @@ impl WebDriverManager {
             }
             _ => None,
         };
-        let caps_version = caps._get("browserVersion").and_then(Value::as_str);
+        let caps_version = caps.get("browserVersion").and_then(Value::as_str);
 
         let download_cfg = DownloadConfig {
             cache_dir: self.cfg.cache_dir.clone(),

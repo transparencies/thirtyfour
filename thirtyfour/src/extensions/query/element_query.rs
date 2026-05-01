@@ -417,12 +417,6 @@ impl ElementQuery {
         disallow_empty!(elements, self)
     }
 
-    /// Return all WebElements that match any single selector (including filters).
-    #[deprecated(since = "0.32.0", note = "use all_from_selector() instead")]
-    pub async fn all(&self) -> WebDriverResult<Vec<WebElement>> {
-        self.all_from_selector().await
-    }
-
     /// Return all WebElements that match a single selector (including filters).
     ///
     /// This will return when at least one element is found from any selector, without
@@ -431,12 +425,6 @@ impl ElementQuery {
     /// Returns an empty Vec if no elements match.
     pub async fn all_from_selector(&self) -> WebDriverResult<Vec<WebElement>> {
         self.run_poller(true, false).await
-    }
-
-    /// Return all WebElements that match any single selector (including filters).
-    #[deprecated(since = "0.32.0", note = "use all_from_selector_required() instead")]
-    pub async fn all_required(&self) -> WebDriverResult<Vec<WebElement>> {
-        self.all_from_selector_required().await
     }
 
     /// Return all WebElements that match any single selector (including filters).

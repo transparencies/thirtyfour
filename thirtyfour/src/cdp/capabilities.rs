@@ -108,7 +108,7 @@ mod tests {
     fn caps_with(pairs: &[(&str, Value)]) -> Capabilities {
         let mut c = Capabilities::new();
         for (k, v) in pairs {
-            c.insert(k.to_string(), v.clone());
+            c.set(*k, v.clone()).unwrap();
         }
         c
     }

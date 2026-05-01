@@ -1,9 +1,16 @@
+use std::fmt::Formatter;
+use std::future::{Future, IntoFuture};
 use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
+
+use http::HeaderValue;
 
 use crate::Capabilities;
-use crate::common::config::WebDriverConfig;
+use crate::common::config::{WebDriverConfig, WebDriverConfigBuilder};
 use crate::error::WebDriverResult;
+use crate::extensions::query::IntoElementPoller;
 use crate::prelude::WebDriverError;
 use crate::session::create::start_session;
 use crate::session::handle::SessionHandle;
@@ -19,7 +26,7 @@ use crate::session::http::create_reqwest_client;
 /// use thirtyfour::prelude::*;
 /// # use thirtyfour::support::block_on;
 ///
-/// # fn main() -> color_eyre::Result<()> {
+/// # fn main() -> anyhow::Result<()> {
 /// #     block_on(async {
 /// let caps = DesiredCapabilities::firefox();
 /// let driver = WebDriver::new("http://localhost:4444", caps).await?;
@@ -32,8 +39,7 @@ use crate::session::http::create_reqwest_client;
 /// ```
 #[derive(Debug, Clone)]
 pub struct WebDriver {
-    /// The underlying session handle.
-    pub handle: Arc<SessionHandle>,
+    pub(crate) handle: Arc<SessionHandle>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -58,9 +64,12 @@ impl WebDriver {
     /// # }
     /// ```
     ///
+    /// To customize timeouts, the user agent, the element poller, or supply a
+    /// custom [`HttpClient`], use [`WebDriver::builder`] instead.
+    ///
     /// ## Using Selenium Server
-    /// - For selenium 3.x, you need to also add "/wd/hub/session" to the end of the url
-    ///   (e.g. "http://localhost:4444/wd/hub/session")
+    /// - For selenium 3.x, you need to also add "/wd/hub" to the end of the url
+    ///   (e.g. "http://localhost:4444/wd/hub")
     /// - For selenium 4.x and later, no path should be needed on the url.
     ///
     /// ## Troubleshooting
@@ -72,62 +81,45 @@ impl WebDriver {
         S: Into<String>,
         C: Into<Capabilities>,
     {
-        Self::new_with_config(server_url, capabilities, WebDriverConfig::default()).await
+        Self::builder(server_url, capabilities).await
     }
 
-    /// Create a new `WebDriver` with the specified `WebDriverConfig`.
+    /// Construct a [`WebDriverBuilder`] for advanced session configuration —
+    /// custom timeouts, user agent, element poller, or a user-supplied
+    /// [`HttpClient`]. Awaiting the builder constructs the session.
     ///
-    /// Use `WebDriverConfig::builder().build()` to construct the config.
-    pub async fn new_with_config<S, C>(
-        server_url: S,
-        capabilities: C,
-        config: WebDriverConfig,
-    ) -> WebDriverResult<Self>
+    /// For the default configuration, prefer [`WebDriver::new`].
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use std::time::Duration;
+    /// # use thirtyfour::prelude::*;
+    /// # async fn run() -> WebDriverResult<()> {
+    /// let caps = DesiredCapabilities::chrome();
+    /// let driver = WebDriver::builder("http://localhost:4444", caps)
+    ///     .request_timeout(Duration::from_secs(30))
+    ///     .user_agent("my-app/1.0")
+    ///     .await?;
+    /// # driver.quit().await }
+    /// ```
+    pub fn builder<S, C>(server_url: S, capabilities: C) -> WebDriverBuilder
     where
         S: Into<String>,
         C: Into<Capabilities>,
     {
-        // TODO: create builder
-        #[cfg(feature = "reqwest")]
-        let client = create_reqwest_client(config.reqwest_timeout);
-        #[cfg(not(feature = "reqwest"))]
-        let client = crate::session::http::null_client::create_null_client();
-        Self::new_with_config_and_client(server_url, capabilities, config, client).await
+        WebDriverBuilder::new(server_url, capabilities)
     }
 
-    /// Create a new `WebDriver` with the specified `WebDriverConfig`.
+    /// Returns a reference to the underlying [`SessionHandle`]. Useful for
+    /// extension code that needs to clone the handle (e.g. building a
+    /// [`WebElement`] from a JSON value via [`WebElement::from_json`]).
+    /// Most users won't need this — methods on `SessionHandle` are already
+    /// reachable through `Deref` (e.g. `driver.session_id()`).
     ///
-    /// Use `WebDriverConfig::builder().build()` to construct the config.
-    pub async fn new_with_config_and_client<S, C>(
-        server_url: S,
-        capabilities: C,
-        config: WebDriverConfig,
-        client: impl HttpClient,
-    ) -> WebDriverResult<Self>
-    where
-        S: Into<String>,
-        C: Into<Capabilities>,
-    {
-        let capabilities = capabilities.into();
-        let server_url = server_url
-            .into()
-            .parse()
-            .map_err(|e| WebDriverError::ParseError(format!("invalid url: {e}")))?;
-
-        let client = Arc::new(client);
-        let started = start_session(client.as_ref(), &server_url, &config, capabilities).await?;
-
-        let handle = SessionHandle::new_with_config_guard_and_caps(
-            client,
-            server_url,
-            started.session_id,
-            config,
-            None,
-            started.capabilities,
-        )?;
-        Ok(Self {
-            handle: Arc::new(handle),
-        })
+    /// [`WebElement`]: crate::WebElement
+    /// [`WebElement::from_json`]: crate::WebElement::from_json
+    pub fn handle(&self) -> &Arc<SessionHandle> {
+        &self.handle
     }
 
     /// Clone this `WebDriver` keeping the session handle, but supplying a new `WebDriverConfig`.
@@ -276,5 +268,151 @@ impl Deref for WebDriver {
 
     fn deref(&self) -> &Self::Target {
         &self.handle
+    }
+}
+
+/// Builder for [`WebDriver`] sessions that talk to an externally-managed
+/// driver (e.g. a Selenium Grid, a manually-launched chromedriver, or any
+/// W3C-compatible WebDriver server).
+///
+/// Construct via [`WebDriver::builder`]. Awaiting the builder opens the
+/// session.
+///
+/// # Example
+/// ```no_run
+/// # use std::time::Duration;
+/// # use thirtyfour::prelude::*;
+/// # async fn run() -> WebDriverResult<()> {
+/// let caps = DesiredCapabilities::chrome();
+/// let driver = WebDriver::builder("http://localhost:4444", caps)
+///     .request_timeout(Duration::from_secs(30))
+///     .user_agent("my-app/1.0")
+///     .await?;
+/// # driver.quit().await }
+/// ```
+///
+/// For driver-managed sessions (auto-download + spawn), use
+/// [`WebDriver::managed`] instead.
+pub struct WebDriverBuilder {
+    server_url: String,
+    capabilities: Capabilities,
+    config: WebDriverConfigBuilder,
+    client: Option<Box<dyn HttpClient>>,
+}
+
+impl std::fmt::Debug for WebDriverBuilder {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebDriverBuilder")
+            .field("server_url", &self.server_url)
+            .field("capabilities", &self.capabilities)
+            .field("config", &self.config)
+            .field("client", &self.client.as_ref().map(|_| "<custom>"))
+            .finish()
+    }
+}
+
+impl WebDriverBuilder {
+    fn new<S, C>(server_url: S, capabilities: C) -> Self
+    where
+        S: Into<String>,
+        C: Into<Capabilities>,
+    {
+        Self {
+            server_url: server_url.into(),
+            capabilities: capabilities.into(),
+            config: WebDriverConfig::builder(),
+            client: None,
+        }
+    }
+
+    /// Set the `Connection: keep-alive` header on outgoing requests.
+    /// Default: `true`.
+    pub fn keep_alive(mut self, keep_alive: bool) -> Self {
+        self.config = self.config.keep_alive(keep_alive);
+        self
+    }
+
+    /// Set the element poller used by [`WebDriver::query`] and
+    /// [`WebElement::wait_until`].
+    ///
+    /// [`WebDriver::query`]: crate::extensions::query::ElementQueryable::query
+    /// [`WebElement::wait_until`]: crate::extensions::query::ElementWaitable::wait_until
+    pub fn poller(mut self, poller: Arc<dyn IntoElementPoller + Send + Sync>) -> Self {
+        self.config = self.config.poller(poller);
+        self
+    }
+
+    /// Override the `User-Agent` header sent with WebDriver requests.
+    /// Default: `WebDriverConfig::DEFAULT_USER_AGENT`.
+    pub fn user_agent<V>(mut self, user_agent: V) -> Self
+    where
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<WebDriverError>,
+    {
+        self.config = self.config.user_agent(user_agent);
+        self
+    }
+
+    /// Override the per-request HTTP timeout. Default: `120s`. Applied to the
+    /// default reqwest-based client; custom [`HttpClient`] implementations
+    /// supplied via [`WebDriverBuilder::client`] may also honour it.
+    pub fn request_timeout(mut self, timeout: Duration) -> Self {
+        self.config = self.config.request_timeout(timeout);
+        self
+    }
+
+    /// Use a custom [`HttpClient`] instead of the default reqwest-based one.
+    /// Useful for plugging in a proxy, custom TLS configuration, or running
+    /// without the `reqwest` feature.
+    pub fn client(mut self, client: impl HttpClient + 'static) -> Self {
+        self.client = Some(Box::new(client));
+        self
+    }
+
+    /// Open the session.
+    pub async fn connect(self) -> WebDriverResult<WebDriver> {
+        let config = self.config.build()?;
+
+        let client: Arc<dyn HttpClient> = match self.client {
+            Some(c) => Arc::from(c),
+            None => {
+                #[cfg(feature = "reqwest")]
+                {
+                    Arc::new(create_reqwest_client(config.request_timeout))
+                }
+                #[cfg(not(feature = "reqwest"))]
+                {
+                    Arc::new(crate::session::http::null_client::create_null_client())
+                }
+            }
+        };
+
+        let server_url = self
+            .server_url
+            .parse()
+            .map_err(|e| WebDriverError::ParseError(format!("invalid url: {e}")))?;
+        let started =
+            start_session(client.as_ref(), &server_url, &config, self.capabilities).await?;
+
+        let handle = SessionHandle::new_with_config_guard_and_caps(
+            client,
+            server_url,
+            started.session_id,
+            config,
+            None,
+            started.capabilities,
+        )?;
+        Ok(WebDriver {
+            handle: Arc::new(handle),
+        })
+    }
+}
+
+impl IntoFuture for WebDriverBuilder {
+    type Output = WebDriverResult<WebDriver>;
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(self.connect())
     }
 }

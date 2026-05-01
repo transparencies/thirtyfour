@@ -1,7 +1,6 @@
 use serde::Serialize;
-use serde_json::{Value, json};
 
-use crate::{Capabilities, CapabilitiesHelper};
+use crate::Capabilities;
 
 /// Capabilities for Safari.
 #[derive(Debug, Clone, Serialize)]
@@ -20,7 +19,7 @@ impl SafariCapabilities {
     /// Create a new `SafariCapabilities`.
     pub fn new() -> Self {
         let mut capabilities = Capabilities::new();
-        capabilities.insert("browserName".to_string(), json!("safari"));
+        capabilities.set("browserName", "safari").expect("infallible");
         SafariCapabilities {
             capabilities,
         }
@@ -33,16 +32,14 @@ impl From<SafariCapabilities> for Capabilities {
     }
 }
 
-impl CapabilitiesHelper for SafariCapabilities {
-    fn _get(&self, key: &str) -> Option<&Value> {
-        self.capabilities._get(key)
+impl AsRef<Capabilities> for SafariCapabilities {
+    fn as_ref(&self) -> &Capabilities {
+        &self.capabilities
     }
+}
 
-    fn _get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        self.capabilities._get_mut(key)
-    }
-
-    fn insert_base_capability(&mut self, key: String, value: Value) {
-        self.capabilities.insert_base_capability(key, value);
+impl AsMut<Capabilities> for SafariCapabilities {
+    fn as_mut(&mut self) -> &mut Capabilities {
+        &mut self.capabilities
     }
 }

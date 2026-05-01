@@ -8,11 +8,9 @@
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
-
+async fn main() -> anyhow::Result<()> {
     let mut caps = DesiredCapabilities::chrome();
-    caps.insert_browser_option(
+    caps.set_browser_option(
         "prefs",
         serde_json::json!({
             "profile.default_content_settings": {

@@ -2,9 +2,8 @@ use pastey::paste;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, from_value, json, to_value};
 
-use crate::CapabilitiesHelper;
 use crate::error::WebDriverResult;
-use crate::{BrowserCapabilitiesHelper, Capabilities};
+use crate::{BrowserCapabilitiesHelper, Capabilities, CapabilitiesHelper};
 
 /// Capabilities for Firefox.
 #[derive(Debug, Clone, Serialize)]
@@ -47,7 +46,7 @@ impl FirefoxCapabilities {
     /// Create a new `FirefoxCapabilities`.
     pub fn new() -> Self {
         let mut capabilities = Capabilities::new();
-        capabilities.insert("browserName".to_string(), json!("firefox"));
+        capabilities.set("browserName", "firefox").expect("infallible");
         FirefoxCapabilities {
             capabilities,
         }
@@ -61,7 +60,7 @@ impl FirefoxCapabilities {
         component: String,
         log_level: LoggingPrefsLogLevel,
     ) -> WebDriverResult<()> {
-        self.set_base_capability("loggingPrefs", json!({ component: log_level }))
+        self.set("loggingPrefs", json!({ component: log_level }))
     }
 
     /// Get the `geckodriver` log level.
@@ -77,17 +76,17 @@ impl FirefoxCapabilities {
 
     /// Set the `geckodriver` log level.
     pub fn set_log_level(&mut self, log_level: LogLevel) -> WebDriverResult<()> {
-        self.insert_browser_option("log", json!({ "level": log_level }))
+        self.set_browser_option("log", json!({ "level": log_level }))
     }
 
     /// Set the start command for the firefox binary.
     pub fn set_firefox_binary(&mut self, start_cmd: &str) -> WebDriverResult<()> {
-        self.insert_browser_option("binary", start_cmd)
+        self.set_browser_option("binary", start_cmd)
     }
 
     /// Set the firefox preferences to use.
     pub fn set_preferences(&mut self, preferences: FirefoxPreferences) -> WebDriverResult<()> {
-        self.insert_browser_option("prefs", preferences)
+        self.set_browser_option("prefs", preferences)
     }
 
     /// Get the firefox profile zip as a base64-encoded string.
@@ -99,7 +98,7 @@ impl FirefoxCapabilities {
     ///
     /// The profile must be a zipped, base64-encoded string of the profile directory.
     pub fn set_encoded_profile(&mut self, profile: &str) -> WebDriverResult<()> {
-        self.insert_browser_option("profile", profile)
+        self.set_browser_option("profile", profile)
     }
 
     /// Add the specified command-line argument to `geckodriver`.
@@ -109,7 +108,7 @@ impl FirefoxCapabilities {
         if !args.contains(&arg_string) {
             args.push(arg_string);
         }
-        self.insert_browser_option("args", to_value(args)?)
+        self.set_browser_option("args", to_value(args)?)
     }
 
     firefox_arg_wrapper! {
@@ -123,17 +122,15 @@ impl From<FirefoxCapabilities> for Capabilities {
     }
 }
 
-impl CapabilitiesHelper for FirefoxCapabilities {
-    fn _get(&self, key: &str) -> Option<&Value> {
-        self.capabilities._get(key)
+impl AsRef<Capabilities> for FirefoxCapabilities {
+    fn as_ref(&self) -> &Capabilities {
+        &self.capabilities
     }
+}
 
-    fn _get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        self.capabilities._get_mut(key)
-    }
-
-    fn insert_base_capability(&mut self, key: String, value: Value) {
-        self.capabilities.insert_base_capability(key, value);
+impl AsMut<Capabilities> for FirefoxCapabilities {
+    fn as_mut(&mut self) -> &mut Capabilities {
+        &mut self.capabilities
     }
 }
 

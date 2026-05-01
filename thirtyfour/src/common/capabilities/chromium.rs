@@ -3,10 +3,10 @@ use std::path::Path;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use pastey::paste;
 use serde::Serialize;
-use serde_json::{Value, json, to_value};
+use serde_json::to_value;
 
 use crate::error::WebDriverResult;
-use crate::{BrowserCapabilitiesHelper, Capabilities, CapabilitiesHelper};
+use crate::{BrowserCapabilitiesHelper, Capabilities};
 
 macro_rules! chromium_arg_wrapper {
     ($($fname:ident => $opt:literal),*) => {
@@ -48,7 +48,7 @@ pub trait ChromiumLikeCapabilities: BrowserCapabilitiesHelper {
 
     /// Set the path to chrome binary to use.
     fn set_binary(&mut self, path: &str) -> WebDriverResult<()> {
-        self.insert_browser_option("binary", path)
+        self.set_browser_option("binary", path)
     }
 
     /// Unset the chrome binary path.
@@ -63,7 +63,7 @@ pub trait ChromiumLikeCapabilities: BrowserCapabilitiesHelper {
 
     /// Set the debugger address.
     fn set_debugger_address(&mut self, address: &str) -> WebDriverResult<()> {
-        self.insert_browser_option("debuggerAddress", address)
+        self.set_browser_option("debuggerAddress", address)
     }
 
     /// Unset the debugger address.
@@ -88,7 +88,7 @@ pub trait ChromiumLikeCapabilities: BrowserCapabilitiesHelper {
         if !args.contains(&arg_string) {
             args.push(arg_string);
         }
-        self.insert_browser_option("args", to_value(args)?)
+        self.set_browser_option("args", to_value(args)?)
     }
 
     /// Add the specified experimental option.
@@ -105,7 +105,7 @@ pub trait ChromiumLikeCapabilities: BrowserCapabilitiesHelper {
         name: impl Into<String>,
         value: impl Serialize,
     ) -> WebDriverResult<()> {
-        self.insert_browser_option(name, value)
+        self.set_browser_option(name, value)
     }
 
     /// Remove the specified experimental option.
@@ -120,7 +120,7 @@ pub trait ChromiumLikeCapabilities: BrowserCapabilitiesHelper {
         if !extensions.contains(&ext_string) {
             extensions.push(ext_string);
         }
-        self.insert_browser_option("extensions", to_value(extensions)?)
+        self.set_browser_option("extensions", to_value(extensions)?)
     }
 
     /// Remove the specified base64-encoded extension if it had been added previously.
@@ -130,7 +130,7 @@ pub trait ChromiumLikeCapabilities: BrowserCapabilitiesHelper {
             Ok(())
         } else {
             extensions.retain(|v| v != extension_base64);
-            self.insert_browser_option("extensions", to_value(extensions)?)
+            self.set_browser_option("extensions", to_value(extensions)?)
         }
     }
 
@@ -203,24 +203,22 @@ impl ChromiumCapabilities {
     /// Create a new ChromeCapabilities struct.
     pub fn new() -> Self {
         let mut capabilities = Capabilities::new();
-        capabilities.insert("browserName".to_string(), json!("chromium"));
+        capabilities.set("browserName", "chromium").expect("infallible");
         ChromiumCapabilities {
             capabilities,
         }
     }
 }
 
-impl CapabilitiesHelper for ChromiumCapabilities {
-    fn _get(&self, key: &str) -> Option<&Value> {
-        self.capabilities._get(key)
+impl AsRef<Capabilities> for ChromiumCapabilities {
+    fn as_ref(&self) -> &Capabilities {
+        &self.capabilities
     }
+}
 
-    fn _get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        self.capabilities._get_mut(key)
-    }
-
-    fn insert_base_capability(&mut self, key: String, value: Value) {
-        self.capabilities.insert_base_capability(key, value);
+impl AsMut<Capabilities> for ChromiumCapabilities {
+    fn as_mut(&mut self) -> &mut Capabilities {
+        &mut self.capabilities
     }
 }
 

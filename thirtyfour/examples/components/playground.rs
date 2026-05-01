@@ -16,9 +16,7 @@ use thirtyfour::{
 };
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
-
+async fn main() -> anyhow::Result<()> {
     let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
     driver.goto("https://play.rust-lang.org").await?;
 

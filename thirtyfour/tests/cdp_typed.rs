@@ -910,7 +910,7 @@ async fn legacy_chrome_devtools_still_works() -> WebDriverResult<()> {
     with_timeout(async {
         let driver = WebDriver::managed(chrome_caps()).await?;
         #[allow(deprecated)]
-        let dev = ChromeDevTools::new(driver.handle.clone());
+        let dev = ChromeDevTools::new(driver.handle().clone());
         #[allow(deprecated)]
         let v = dev.execute_cdp("Browser.getVersion").await?;
         assert!(v["userAgent"].as_str().unwrap().to_ascii_lowercase().contains("chrome"));

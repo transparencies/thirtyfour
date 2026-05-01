@@ -20,8 +20,11 @@ pub struct WebDriverConfig {
     pub poller: Arc<dyn IntoElementPoller + Send + Sync>,
     /// The user agent to use when sending commands to the webdriver server.
     pub user_agent: HeaderValue,
-    /// The timeout duration for reqwest client requests.
-    pub reqwest_timeout: Duration,
+    /// Per-request HTTP timeout. Applied to the default reqwest-based
+    /// [`HttpClient`]; custom client implementations may also honour it.
+    ///
+    /// [`HttpClient`]: crate::session::http::HttpClient
+    pub request_timeout: Duration,
 }
 
 impl Default for WebDriverConfig {
@@ -54,15 +57,6 @@ impl WebDriverConfig {
 
         HeaderValue::from_static(HEADER)
     };
-
-    /// Get the default user agent.
-    #[deprecated(
-        since = "0.34.1",
-        note = "This associated function is now a constant `WebDriverConfig::DEFAULT_USER_AGENT`"
-    )]
-    pub fn default_user_agent() -> HeaderValue {
-        Self::DEFAULT_USER_AGENT
-    }
 }
 
 /// Builder for `WebDriverConfig`.
@@ -71,7 +65,7 @@ pub struct WebDriverConfigBuilder {
     keep_alive: bool,
     poller: Option<Arc<dyn IntoElementPoller + Send + Sync>>,
     user_agent: Option<WebDriverResult<HeaderValue>>,
-    reqwest_timeout: Duration,
+    request_timeout: Duration,
 }
 
 impl Default for WebDriverConfigBuilder {
@@ -87,7 +81,7 @@ impl WebDriverConfigBuilder {
             keep_alive: true,
             poller: None,
             user_agent: None,
-            reqwest_timeout: Duration::from_secs(120),
+            request_timeout: Duration::from_secs(120),
         }
     }
 
@@ -113,9 +107,9 @@ impl WebDriverConfigBuilder {
         self
     }
 
-    /// Set the reqwest timeout.
-    pub fn reqwest_timeout(mut self, timeout: Duration) -> Self {
-        self.reqwest_timeout = timeout;
+    /// Set the per-request HTTP timeout. Default: 120s.
+    pub fn request_timeout(mut self, timeout: Duration) -> Self {
+        self.request_timeout = timeout;
         self
     }
 
@@ -125,7 +119,7 @@ impl WebDriverConfigBuilder {
             keep_alive: self.keep_alive,
             poller: self.poller.unwrap_or_else(|| Arc::new(ElementPollerWithTimeout::default())),
             user_agent: self.user_agent.transpose()?.unwrap_or(WebDriverConfig::DEFAULT_USER_AGENT),
-            reqwest_timeout: self.reqwest_timeout,
+            request_timeout: self.request_timeout,
         })
     }
 }

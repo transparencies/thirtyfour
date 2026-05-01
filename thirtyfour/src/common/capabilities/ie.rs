@@ -1,7 +1,6 @@
 use serde::Serialize;
-use serde_json::{Value, json};
 
-use crate::{BrowserCapabilitiesHelper, Capabilities, CapabilitiesHelper};
+use crate::{BrowserCapabilitiesHelper, Capabilities};
 
 /// Capabilities for Internet Explorer.
 #[derive(Debug, Clone, Serialize)]
@@ -20,7 +19,7 @@ impl InternetExplorerCapabilities {
     /// Create a new `InternetExplorerCapabilities`.
     pub fn new() -> Self {
         let mut capabilities = Capabilities::new();
-        capabilities.insert("browserName".to_string(), json!("internet explorer"));
+        capabilities.set("browserName", "internet explorer").expect("infallible");
         InternetExplorerCapabilities {
             capabilities,
         }
@@ -33,17 +32,15 @@ impl From<InternetExplorerCapabilities> for Capabilities {
     }
 }
 
-impl CapabilitiesHelper for InternetExplorerCapabilities {
-    fn _get(&self, key: &str) -> Option<&Value> {
-        self.capabilities._get(key)
+impl AsRef<Capabilities> for InternetExplorerCapabilities {
+    fn as_ref(&self) -> &Capabilities {
+        &self.capabilities
     }
+}
 
-    fn _get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        self.capabilities._get_mut(key)
-    }
-
-    fn insert_base_capability(&mut self, key: String, value: Value) {
-        self.capabilities.insert_base_capability(key, value);
+impl AsMut<Capabilities> for InternetExplorerCapabilities {
+    fn as_mut(&mut self) -> &mut Capabilities {
+        &mut self.capabilities
     }
 }
 

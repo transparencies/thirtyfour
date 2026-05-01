@@ -155,7 +155,7 @@ fn driver_key_differs_when_host_differs() {
 #[test]
 fn webdriver_managed_returns_builder_with_caps() {
     let mut caps = Capabilities::new();
-    caps.insert("browserName".into(), json!("chrome"));
+    caps.set("browserName", "chrome").unwrap();
     let builder = crate::WebDriver::managed(caps);
     assert!(builder.preloaded_caps.is_some());
     assert_eq!(builder.version, DriverVersion::MatchLocalBrowser);

@@ -9,11 +9,7 @@
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    // The use of color_eyre gives much nicer error reports, including making
-    // it much easier to locate where the error occurred.
-    color_eyre::install()?;
-
+async fn main() -> anyhow::Result<()> {
     let caps = DesiredCapabilities::chrome();
     // NOTE: For selenium 3.x, use "http://localhost:4444/wd/hub/session".
     let driver = WebDriver::new("http://localhost:4444", caps).await?;

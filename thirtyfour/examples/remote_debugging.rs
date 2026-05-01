@@ -17,7 +17,7 @@
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let mut caps = DesiredCapabilities::chrome();
     caps.set_debugger_address("localhost:9222")?;
     let driver = WebDriver::managed(caps).await?;

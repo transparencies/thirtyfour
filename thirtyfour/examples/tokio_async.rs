@@ -8,11 +8,7 @@
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    // The use of color_eyre gives much nicer error reports, including making
-    // it much easier to locate where the error occurred.
-    color_eyre::install()?;
-
+async fn main() -> anyhow::Result<()> {
     let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
     // Navigate to https://wikipedia.org.
     driver.goto("https://wikipedia.org").await?;
