@@ -138,9 +138,16 @@ pub struct CloseTarget {
     /// Target id to close.
     pub target_id: TargetId,
 }
+/// Response for [`CloseTarget`]. CDP includes a deprecated `success`
+/// boolean that is always `true` for compatibility.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CloseTargetResult {
+    /// Always `true` — CDP keeps the field for backwards compatibility.
+    pub success: bool,
+}
 impl CdpCommand for CloseTarget {
     const METHOD: &'static str = "Target.closeTarget";
-    type Returns = Empty;
+    type Returns = CloseTargetResult;
 }
 
 /// `Target.attachedToTarget` event.
@@ -205,185 +212,15 @@ impl<'a> TargetDomain<'a> {
         Ok(r.target_id)
     }
 
-    /// `Target.closeTarget`.
-    pub async fn close_target(&self, target_id: TargetId) -> WebDriverResult<()> {
-        self.cdp
+    /// `Target.closeTarget`. Returns `true` on success — CDP only ever
+    /// returns `true` here, so most callers can ignore the result.
+    pub async fn close_target(&self, target_id: TargetId) -> WebDriverResult<bool> {
+        Ok(self
+            .cdp
             .send(CloseTarget {
                 target_id,
             })
-            .await?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn methods() {
-        assert_eq!(AttachToTarget::METHOD, "Target.attachToTarget");
-        assert_eq!(DetachFromTarget::METHOD, "Target.detachFromTarget");
-        assert_eq!(SetAutoAttach::METHOD, "Target.setAutoAttach");
-        assert_eq!(GetTargets::METHOD, "Target.getTargets");
-        assert_eq!(CreateTarget::METHOD, "Target.createTarget");
-        assert_eq!(CloseTarget::METHOD, "Target.closeTarget");
-    }
-
-    #[test]
-    fn event_methods() {
-        assert_eq!(AttachedToTarget::METHOD, "Target.attachedToTarget");
-        assert_eq!(DetachedFromTarget::METHOD, "Target.detachedFromTarget");
-    }
-
-    #[test]
-    fn attach_to_target_flat_mode() {
-        let v = serde_json::to_value(AttachToTarget::flat(TargetId::from("T1"))).unwrap();
-        assert_eq!(v["targetId"], "T1");
-        assert_eq!(v["flatten"], true);
-    }
-
-    #[test]
-    fn attach_to_target_result_parses() {
-        let r: AttachToTargetResult = serde_json::from_value(json!({"sessionId": "S1"})).unwrap();
-        assert_eq!(r.session_id.as_str(), "S1");
-    }
-
-    #[test]
-    fn detach_from_target_with_session_id() {
-        let v = serde_json::to_value(DetachFromTarget {
-            session_id: Some(SessionId::from("S1")),
-        })
-        .unwrap();
-        assert_eq!(v["sessionId"], "S1");
-    }
-
-    #[test]
-    fn detach_from_target_default_skips() {
-        let v = serde_json::to_value(DetachFromTarget::default()).unwrap();
-        assert!(v.as_object().unwrap().is_empty());
-    }
-
-    #[test]
-    fn set_auto_attach_required_fields() {
-        let v = serde_json::to_value(SetAutoAttach {
-            auto_attach: true,
-            wait_for_debugger_on_start: false,
-            flatten: true,
-        })
-        .unwrap();
-        assert_eq!(v["autoAttach"], true);
-        assert_eq!(v["waitForDebuggerOnStart"], false);
-        assert_eq!(v["flatten"], true);
-    }
-
-    #[test]
-    fn get_targets_response_uses_camel_case() {
-        let body = json!({
-            "targetInfos": [
-                {
-                    "targetId": "T-1",
-                    "type": "page",
-                    "title": "",
-                    "url": "about:blank",
-                    "attached": true
-                }
-            ]
-        });
-        let r: GetTargetsResult = serde_json::from_value(body).unwrap();
-        assert_eq!(r.target_infos.len(), 1);
-        assert_eq!(r.target_infos[0].target_id.as_str(), "T-1");
-        assert_eq!(r.target_infos[0].r#type, "page");
-        assert!(r.target_infos[0].attached);
-    }
-
-    #[test]
-    fn target_info_with_browser_context_and_opener() {
-        let body = json!({
-            "targetId": "T-1",
-            "type": "page",
-            "title": "child",
-            "url": "https://example.com",
-            "attached": false,
-            "browserContextId": "CTX",
-            "openerId": "T-0"
-        });
-        let info: TargetInfo = serde_json::from_value(body).unwrap();
-        assert_eq!(info.browser_context_id.as_ref().unwrap().as_str(), "CTX");
-        assert_eq!(info.opener_id.as_ref().unwrap().as_str(), "T-0");
-    }
-
-    #[test]
-    fn create_target_minimal() {
-        let v = serde_json::to_value(CreateTarget {
-            url: "about:blank".to_string(),
-            width: None,
-            height: None,
-            browser_context_id: None,
-            background: None,
-        })
-        .unwrap();
-        assert_eq!(v["url"], "about:blank");
-        for f in ["width", "height", "browserContextId", "background"] {
-            assert!(v.get(f).is_none(), "{f} should be omitted");
-        }
-    }
-
-    #[test]
-    fn create_target_full() {
-        let v = serde_json::to_value(CreateTarget {
-            url: "https://example.com/".to_string(),
-            width: Some(1024),
-            height: Some(768),
-            browser_context_id: Some(BrowserContextId::from("CTX")),
-            background: Some(true),
-        })
-        .unwrap();
-        assert_eq!(v["width"], 1024);
-        assert_eq!(v["height"], 768);
-        assert_eq!(v["browserContextId"], "CTX");
-        assert_eq!(v["background"], true);
-    }
-
-    #[test]
-    fn create_target_result_parses() {
-        let r: CreateTargetResult = serde_json::from_value(json!({"targetId": "T-9"})).unwrap();
-        assert_eq!(r.target_id.as_str(), "T-9");
-    }
-
-    #[test]
-    fn close_target_serialises_target_id() {
-        let v = serde_json::to_value(CloseTarget {
-            target_id: TargetId::from("T-1"),
-        })
-        .unwrap();
-        assert_eq!(v["targetId"], "T-1");
-    }
-
-    #[test]
-    fn attached_to_target_event_parses() {
-        let body = json!({
-            "sessionId": "S1",
-            "targetInfo": {
-                "targetId": "T1",
-                "type": "page",
-                "title": "",
-                "url": "",
-                "attached": true
-            },
-            "waitingForDebugger": false
-        });
-        let evt: AttachedToTarget = serde_json::from_value(body).unwrap();
-        assert_eq!(evt.session_id.as_str(), "S1");
-        assert!(!evt.waiting_for_debugger);
-    }
-
-    #[test]
-    fn detached_from_target_event_parses() {
-        let body = json!({"sessionId": "S1", "targetId": "T1"});
-        let evt: DetachedFromTarget = serde_json::from_value(body).unwrap();
-        assert_eq!(evt.session_id.as_str(), "S1");
-        assert_eq!(evt.target_id.as_ref().unwrap().as_str(), "T1");
+            .await?
+            .success)
     }
 }

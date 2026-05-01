@@ -18,18 +18,20 @@
 //! 1. **Verify wire field names against the live spec.** Most fields are
 //!    `#[serde(rename_all = "camelCase")]`, but CDP uses SCREAMING
 //!    acronyms (`documentURL`, `baseURL`, etc.) on a number of fields —
-//!    these need explicit `#[serde(rename = "...")]`. Without this the
-//!    field deserialises to its `Default::default()` and the bug is
-//!    silent.
-//! 2. **Use [`crate::cdp::Empty`] for commands that return `{}`.** A bare
+//!    these need explicit `#[serde(rename = "...")]`.
+//! 2. **For closed string sets, use the internal `string_enum!` macro**
+//!    (in `cdp/macros.rs`) rather than raw `String` fields. The macro
+//!    generates a forward-compat `Unknown(String)` variant.
+//! 3. **Use [`crate::cdp::Empty`] for commands that return `{}`.** A bare
 //!    `()` does NOT deserialise from `{}`.
-//! 3. **For optional params, use `Option<T>` with
+//! 4. **For optional params, use `Option<T>` with
 //!    `#[serde(skip_serializing_if = "Option::is_none")]`.** Required
 //!    params on commands like `Page.navigate` should be plain fields.
-//! 4. **Add a unit test that round-trips the exact wire shape** — see the
-//!    per-module `mod tests` blocks for the pattern. This catches name
-//!    mismatches at unit-test time instead of in browser integration
-//!    tests.
+//! 5. **Add an integration test** in `thirtyfour/tests/cdp_typed.rs` (or
+//!    `cdp_events.rs` for events) that exercises the new command/event
+//!    against a real chromedriver via `WebDriver::managed`. Wire-shape
+//!    unit tests are not accepted: they test the author's mental model
+//!    of CDP rather than CDP itself.
 
 pub mod browser;
 pub mod dom;

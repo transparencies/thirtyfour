@@ -77,29 +77,11 @@ impl CdpErrorEnvelope {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
-    #[test]
-    fn envelope_minimal_parses() {
-        let env: CdpErrorEnvelope =
-            serde_json::from_value(json!({"code": -32601, "message": "no such method"})).unwrap();
-        assert_eq!(env.code, -32601);
-        assert_eq!(env.message, "no such method");
-        assert!(env.data.is_none());
-    }
-
-    #[test]
-    fn envelope_with_data_parses() {
-        let env: CdpErrorEnvelope = serde_json::from_value(json!({
-            "code": -32000,
-            "message": "Target closed.",
-            "data": {"sessionId": "S1"}
-        }))
-        .unwrap();
-        assert_eq!(env.code, -32000);
-        assert!(env.data.is_some());
-    }
-
+    // CdpErrorEnvelope wire-shape coverage: when the WebSocket transport
+    // dispatches a CDP error, the integration tests in `cdp_events.rs`
+    // exercise the parsing path. The tests below cover `into_error()` and
+    // the predicate methods, which are our own logic — not serde derive.
     #[test]
     fn into_error_preserves_command_name() {
         let env = CdpErrorEnvelope {

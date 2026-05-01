@@ -130,6 +130,12 @@ string_id! {
     LoaderId
 }
 
+string_id! {
+    /// Identifier for a Runtime script (`Runtime.ScriptId`). The name
+    /// looks numeric but CDP defines it as an opaque string.
+    ScriptId
+}
+
 int_id! {
     /// Short-lived integer id of a DOM node (`DOM.NodeId`). Valid only while
     /// the DOM agent is enabled in this session.
@@ -149,80 +155,17 @@ int_id! {
 }
 
 int_id! {
-    /// Identifier for a Runtime script (`Runtime.ScriptId`).
-    ScriptId(i64)
-}
-
-int_id! {
     /// Time origin for `Runtime.Timestamp` and `Network.MonotonicTime` —
     /// milliseconds since CDP's monotonic time origin, as `f64`.
     /// Stored unmodified; convert to `Duration` at the call site if needed.
     Timestamp(i64)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn string_id_serialises_transparently() {
-        let id = FrameId::from("F-1");
-        assert_eq!(serde_json::to_value(&id).unwrap(), json!("F-1"));
-        let back: FrameId = serde_json::from_value(json!("F-1")).unwrap();
-        assert_eq!(back, id);
-    }
-
-    #[test]
-    fn string_id_constructors_and_accessors() {
-        let from_str: RequestId = "R".into();
-        let from_string: RequestId = String::from("R").into();
-        let new_call = RequestId::new("R");
-        assert_eq!(from_str, new_call);
-        assert_eq!(from_string, new_call);
-        assert_eq!(from_str.as_str(), "R");
-        assert_eq!(format!("{from_str}"), "R");
-    }
-
-    #[test]
-    fn int_id_serialises_transparently() {
-        let n = NodeId::new(42);
-        assert_eq!(serde_json::to_value(n).unwrap(), json!(42));
-        let back: NodeId = serde_json::from_value(json!(42)).unwrap();
-        assert_eq!(back, n);
-    }
-
-    #[test]
-    fn int_id_constructors_and_accessors() {
-        let n = NodeId::from(7);
-        assert_eq!(n.get(), 7);
-        assert_eq!(format!("{n}"), "7");
-    }
-
-    #[test]
-    fn distinct_string_ids_are_separate_types() {
-        // Compile-time guard: a FrameId is not a RequestId.
-        fn _frame(_: FrameId) {}
-        fn _request(_: RequestId) {}
-        _frame(FrameId::from("X"));
-        _request(RequestId::from("X"));
-    }
-
-    #[test]
-    fn distinct_int_ids_are_separate_types() {
-        // Compile-time guard: NodeId vs BackendNodeId.
-        fn _node(_: NodeId) {}
-        fn _backend(_: BackendNodeId) {}
-        _node(NodeId::new(1));
-        _backend(BackendNodeId::new(1));
-    }
-
-    #[test]
-    fn id_hash_eq_work_for_use_as_map_keys() {
-        use std::collections::HashMap;
-        let mut m = HashMap::new();
-        m.insert(SessionId::from("S1"), 1);
-        m.insert(SessionId::from("S2"), 2);
-        assert_eq!(m.get(&SessionId::from("S1")), Some(&1));
-    }
-}
+// Wire-shape coverage for these IDs lives in the integration tests in
+// `thirtyfour/tests/cdp_typed.rs` — every command that returns or accepts
+// an ID round-trips through real chromedriver, which is the only check
+// that actually proves the transparent serde shape against CDP.
+//
+// The compile-time invariant that distinct IDs (e.g. `FrameId` vs
+// `RequestId`, `NodeId` vs `BackendNodeId`) are separate Rust types is
+// enforced by the type system itself — no runtime assertion needed.

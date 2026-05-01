@@ -45,9 +45,8 @@ cargo fmt && cargo clippy --all-features --all-targets && cargo doc --no-deps --
 
 When adding to the curated set under `thirtyfour/src/cdp/domains/`, **verify
 field names against the live spec** at
-<https://chromedevtools.github.io/devtools-protocol/tot/>. CDP uses
-`#[serde(rename_all = "camelCase")]` for most fields, but several exceptions
-silently break deserialization with no compile-time signal:
+<https://chromedevtools.github.io/devtools-protocol/tot/>. CDP has several
+wire-shape pitfalls with no compile-time signal:
 
 - **SCREAMING acronyms**: `documentURL`, `baseURL`, `requestURL`, etc. —
   `rename_all = "camelCase"` produces `documentUrl` (lowercase `u`), which
@@ -56,14 +55,18 @@ silently break deserialization with no compile-time signal:
   `invalid argument: params not passed`. Unit-struct commands serialise to
   `null`; the transports coerce to `{}` so this works, but new types should
   serialise to a JSON object directly when feasible.
-- **Type wire-format vs Rust enum form**: enums (e.g. `ConnectionType`) map
-  CDP's `cellular2g` → `Cellular2G` via per-variant `#[serde(rename = ...)]`,
-  not just `rename_all = "lowercase"`.
+- **Closed string sets**: use the [`string_enum!`] macro from
+  `cdp/macros.rs`, not raw `String` fields. The macro generates a
+  forward-compat `Unknown(String)` variant for values not yet known.
 - **Returns for `{}` results**: use `Empty` (the marker in `cdp/command.rs`),
   not `()` — `()` doesn't deserialize from `{}`.
 
-Every new command/event must come with a unit test that round-trips the
-exact wire shape (see `cdp/tests.rs` and the per-domain `mod tests` blocks
-for the pattern). The serde defaults will look correct in Rust until they
-silently fail against a real browser otherwise — exactly the class of bug
-that's caught at unit-test time, not at integration-test time.
+**Every new typed command and event MUST come with an integration test**
+in `thirtyfour/tests/cdp_typed.rs` (or `cdp_events.rs` for events) that
+exercises it against a real chromedriver via `WebDriver::managed`. Unit
+tests that round-trip a hand-written wire body are guess-against-guess: if
+the Rust struct has the wrong shape, a unit test that asserts the same
+wrong shape passes. Only a real browser tells you what CDP actually
+expects. Wire-shape unit tests are NOT accepted.
+
+[`string_enum!`]: thirtyfour/src/cdp/macros.rs

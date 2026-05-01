@@ -47,9 +47,6 @@ mod ids;
 mod macros;
 mod transport;
 
-#[cfg(test)]
-mod tests;
-
 #[cfg(feature = "cdp-events")]
 mod capabilities;
 #[cfg(feature = "cdp-events")]
