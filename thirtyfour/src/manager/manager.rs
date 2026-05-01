@@ -464,7 +464,8 @@ impl WebDriverManager {
             browser,
             url: server_url.to_string(),
         });
-        let session_id = start_session(client_arc.as_ref(), &server_url, &config, caps).await?;
+        let started = start_session(client_arc.as_ref(), &server_url, &config, caps).await?;
+        let session_id = started.session_id.clone();
         self.emitter.emit(Status::SessionStarted {
             browser,
             session_id: session_id.to_string(),
@@ -476,12 +477,13 @@ impl WebDriverManager {
             browser,
             session_id: session_id.to_string(),
         });
-        let handle = SessionHandle::new_with_config_and_guard(
+        let handle = SessionHandle::new_with_config_guard_and_caps(
             client_arc,
             server_url,
             session_id,
             config,
             Some(guard),
+            started.capabilities,
         )?;
         Ok(WebDriver {
             handle: Arc::new(handle),

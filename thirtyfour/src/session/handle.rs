@@ -18,7 +18,9 @@ use crate::prelude::WebDriverError;
 use crate::session::scriptret::ScriptRet;
 use crate::support::base64_decode;
 use crate::web_driver::AlreadyQuit;
-use crate::{By, OptionRect, Rect, SessionId, SwitchTo, WebDriverStatus, WebElement, support};
+use crate::{
+    By, Capabilities, OptionRect, Rect, SessionId, SwitchTo, WebDriverStatus, WebElement, support,
+};
 use crate::{IntoArcStr, IntoUrl};
 use crate::{TimeoutConfiguration, WindowHandle};
 
@@ -34,6 +36,10 @@ pub struct SessionHandle {
     server_url: Arc<Url>,
     /// The session id for this webdriver session.
     session_id: SessionId,
+    /// Session capabilities returned by `New Session` (vendor-prefixed
+    /// fields like `goog:chromeOptions.debuggerAddress` and `se:cdp`
+    /// are read from here for CDP WebSocket discovery).
+    capabilities: Arc<Capabilities>,
     /// The config used by this instance.
     config: WebDriverConfig,
     /// quit session flag
@@ -82,10 +88,33 @@ impl SessionHandle {
         config: WebDriverConfig,
         driver_guard: Option<Arc<dyn DriverGuard>>,
     ) -> WebDriverResult<Self> {
+        Self::new_with_config_guard_and_caps(
+            client,
+            server_url,
+            session_id,
+            config,
+            driver_guard,
+            Capabilities::new(),
+        )
+    }
+
+    /// Like [`Self::new_with_config_and_guard`] but also stores the
+    /// capabilities returned by `New Session`. Used internally by
+    /// session-creation paths so vendor caps (e.g. `goog:chromeOptions`,
+    /// `se:cdp`) survive into [`crate::cdp`] discovery.
+    pub(crate) fn new_with_config_guard_and_caps(
+        client: Arc<dyn HttpClient>,
+        server_url: impl IntoUrl,
+        session_id: SessionId,
+        config: WebDriverConfig,
+        driver_guard: Option<Arc<dyn DriverGuard>>,
+        capabilities: Capabilities,
+    ) -> WebDriverResult<Self> {
         Ok(Self {
             client,
             server_url: Arc::new(server_url.into_url()?),
             session_id,
+            capabilities: Arc::new(capabilities),
             config,
             quit: Arc::new(OnceCell::new()),
             driver_guard,
@@ -100,6 +129,7 @@ impl SessionHandle {
             client: Arc::clone(&self.client),
             server_url: Arc::clone(&self.server_url),
             session_id: self.session_id.clone(),
+            capabilities: Arc::clone(&self.capabilities),
             quit: Arc::clone(&self.quit),
             config,
             driver_guard: self.driver_guard.clone(),
@@ -109,6 +139,15 @@ impl SessionHandle {
     /// The session id for this webdriver session.
     pub fn session_id(&self) -> &SessionId {
         &self.session_id
+    }
+
+    /// Capabilities returned by `New Session`. Empty if the WebDriver server
+    /// returned an unrecognised response shape, or if the session was
+    /// constructed via the public [`Self::new`] (which doesn't have access
+    /// to that data). Useful for reading vendor-prefixed fields like
+    /// `goog:chromeOptions` or `se:cdp`.
+    pub fn capabilities(&self) -> &Capabilities {
+        &self.capabilities
     }
 
     /// The opaque driver guard (if this session was launched via the manager).
@@ -1267,6 +1306,7 @@ impl Drop for SessionHandle {
             server_url: Arc::clone(&self.server_url),
             quit: Arc::clone(&self.quit),
             session_id: self.session_id.clone(),
+            capabilities: Arc::clone(&self.capabilities),
             config: self.config.clone(),
             // The guard stays on the *original* SessionHandle so it drops after
             // this DropGuard's quit() future has run. The reconstructed handle

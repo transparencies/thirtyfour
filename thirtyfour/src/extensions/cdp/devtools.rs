@@ -8,6 +8,10 @@ use std::sync::Arc;
 /// The ChromeDevTools struct allows you to interact with Chromium-based browsers via
 /// the Chrome Devtools Protocol (CDP).
 ///
+/// **Deprecated.** Use [`crate::cdp::Cdp`] via [`crate::WebDriver::cdp`]
+/// instead — it gives you typed commands, a domain-grouped API, and
+/// (via the `cdp-events` feature) event subscription.
+///
 /// You can find documentation for the available commands here:
 /// [https://chromedevtools.github.io/devtools-protocol/](https://chromedevtools.github.io/devtools-protocol/])
 ///
@@ -30,6 +34,7 @@ use std::sync::Arc;
 /// #     })
 /// # }
 /// ```
+#[deprecated(since = "0.37.0", note = "use WebDriver::cdp() / thirtyfour::cdp::Cdp instead")]
 #[derive(Debug, Clone)]
 pub struct ChromeDevTools {
     /// The underlying session handle.

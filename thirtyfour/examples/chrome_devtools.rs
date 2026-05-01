@@ -2,37 +2,42 @@
 //!
 //!     cargo run --example chrome_devtools
 //!
-//! Uses `WebDriver::managed` (default `manager` feature), which auto-downloads
-//! the matching `chromedriver` for your installed Chrome and starts it locally.
+//! Demonstrates the typed CDP API on [`WebDriver`]. For event subscription
+//! see `cargo run --example chrome_devtools --features cdp-events`.
 
-use thirtyfour::extensions::cdp::{ChromeDevTools, NetworkConditions};
+use thirtyfour::cdp::domains::network::{ConnectionType, NetworkConditions};
 use thirtyfour::prelude::*;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    // The use of color_eyre gives much nicer error reports, including making
-    // it much easier to locate where the error occurred.
     color_eyre::install()?;
-
     let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
 
-    // Use Chrome Devtools Protocol (CDP).
-    let dev_tools = ChromeDevTools::new(driver.handle.clone());
-    let mut conditions = NetworkConditions::new();
-    conditions.download_throughput = 20;
-    conditions.upload_throughput = 10;
-    dev_tools.set_network_conditions(&conditions).await?;
-    let conditions = dev_tools.get_network_conditions().await?;
-    assert_eq!(conditions.download_throughput, 20);
-    assert_eq!(conditions.upload_throughput, 10);
-    println!("Conditions: {:?}", conditions);
+    // Typed CDP — domain-grouped methods on `driver.cdp()`.
+    let info = driver.cdp().browser().get_version().await?;
+    println!("Chrome: {}", info.product);
+    println!("User agent: {}", info.user_agent);
 
-    // Execute CDP command.
-    let version_info = dev_tools.execute_cdp("Browser.getVersion").await?;
-    println!("Chrome Version: {:?}", version_info);
+    // `Network.emulateNetworkConditions` — works on Chrome, Edge, Brave, Opera.
+    driver
+        .cdp()
+        .network()
+        .emulate_network_conditions(NetworkConditions {
+            offline: false,
+            latency: 200,
+            download_throughput: 256 * 1024,
+            upload_throughput: 64 * 1024,
+            connection_type: Some(ConnectionType::Cellular3G),
+        })
+        .await?;
 
-    // Always explicitly close the browser. This prevents the executor from being blocked
+    // `Network.clearBrowserCache`.
+    driver.cdp().network().clear_browser_cache().await?;
+
+    // Untyped escape hatch for one-off commands not in the curated set.
+    let raw = driver.cdp().send_raw("Browser.getVersion", serde_json::json!({})).await?;
+    println!("Raw response: {}", raw["userAgent"]);
+
     driver.quit().await?;
-
     Ok(())
 }

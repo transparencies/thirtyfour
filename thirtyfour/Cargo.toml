@@ -18,13 +18,20 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
-default = ["reqwest", "rustls", "component", "manager"]
+default = ["reqwest", "rustls", "component", "manager", "cdp"]
 reqwest = ["dep:reqwest"]
 rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 tokio-multi-threaded = ["tokio/rt-multi-thread"]
 component = ["thirtyfour-macros"]
 debug_sync_quit = []
+# Chrome DevTools Protocol — typed commands, the `Cdp` handle, and
+# `WebDriver::cdp()` / `WebElement::cdp_*()` integrations. On by default.
+cdp = []
+# WebSocket-based CDP session with event subscription. Adds
+# `Cdp::connect()` and `CdpSession`. Off by default; pulls in
+# `tokio-tungstenite`.
+cdp-events = ["cdp", "dep:tokio-tungstenite", "tokio/macros", "tokio/rt"]
 # Auto-download and lifetime-manage local chromedriver / geckodriver processes.
 # Pulls in archive-extraction and cache-dir deps. See `thirtyfour::manager`.
 manager = [
@@ -78,6 +85,12 @@ reqwest = { version = "0.13", default-features = false, features = [
     "json",
 ], optional = true }
 
+# Optional WebSocket client for the `cdp-events` feature.
+tokio-tungstenite = { version = "0.24", default-features = false, features = [
+    "connect",
+    "rustls-tls-webpki-roots",
+], optional = true }
+
 # Optional dependencies pulled in by the `manager` feature.
 dirs = { version = "6", optional = true }
 fs4 = { version = "1.1", default-features = false, features = [
@@ -124,7 +137,7 @@ required-features = ["manager"]
 
 [[example]]
 name = "chrome_devtools"
-required-features = ["manager"]
+required-features = ["manager", "cdp"]
 
 [[example]]
 name = "chrome_options"

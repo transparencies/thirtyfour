@@ -129,6 +129,54 @@ impl WebElement {
         self.element_id.clone()
     }
 
+    /// Resolve this WebElement to a CDP `RemoteObjectId` so it can be passed
+    /// to `Runtime.callFunctionOn`, `DOM.requestNode`, etc.
+    ///
+    /// Bridge: stashes the element on a unique `window.__thirtyfour_cdp_*`
+    /// property via `executeScript`, then `Runtime.evaluate`s a one-shot
+    /// IIFE that reads-and-deletes the property, returning the element as
+    /// a `RemoteObject` handle. Requires a Chromium-based session.
+    #[cfg(feature = "cdp")]
+    pub async fn cdp_remote_object_id(&self) -> WebDriverResult<crate::cdp::RemoteObjectId> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let key = format!(
+            "__thirtyfour_cdp_{}_{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
+        );
+        let stash = format!("window['{key}'] = arguments[0];");
+        self.handle.execute(stash, vec![self.to_json()?]).await?;
+        let take =
+            format!("(function(){{var e=window['{key}'];delete window['{key}'];return e;}})()");
+        let cdp = crate::cdp::Cdp::new(self.handle.clone());
+        let result = cdp.send(crate::cdp::domains::runtime::Evaluate::new(take)).await?;
+        result.result.object_id.ok_or_else(|| {
+            WebDriverError::from_inner(WebDriverErrorInner::NotFound(
+                "RemoteObjectId".to_string(),
+                "CDP Runtime.evaluate did not return an object handle".to_string(),
+            ))
+        })
+    }
+
+    /// Resolve this WebElement to a CDP `BackendNodeId`.
+    ///
+    /// Stable across `DOM` agent reattachment, so this is the right id to
+    /// stash if you need to refer back to the element from later CDP calls.
+    /// Requires a Chromium-based session.
+    #[cfg(feature = "cdp")]
+    pub async fn cdp_backend_node_id(&self) -> WebDriverResult<crate::cdp::BackendNodeId> {
+        let object_id = self.cdp_remote_object_id().await?;
+        let cdp = crate::cdp::Cdp::new(self.handle.clone());
+        let described = cdp
+            .send(crate::cdp::domains::dom::DescribeNode {
+                object_id: Some(object_id),
+                ..Default::default()
+            })
+            .await?;
+        Ok(described.node.backend_node_id)
+    }
+
     /// Get the bounding rectangle for this WebElement.
     ///
     /// # Example:
