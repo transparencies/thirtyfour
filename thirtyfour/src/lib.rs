@@ -174,6 +174,7 @@ pub use common::{
     command::By,
     cookie::*,
     keys::*,
+    log::{BrowserLogEntry, LoggingPrefsLogLevel},
     requestdata::*,
     types::*,
 };

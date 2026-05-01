@@ -1035,6 +1035,54 @@ impl SessionHandle {
         Ok(())
     }
 
+    /// List the log types the driver knows about
+    /// (`GET /session/{id}/log/types`).
+    ///
+    /// This is a legacy Selenium endpoint that is **not** part of the W3C
+    /// WebDriver specification. Modern `chromedriver` rejects it in W3C
+    /// mode with `"Cannot call non W3C standard command while in W3C
+    /// mode"`; older `chromedriver`s (and Selenium Grid) still serve it.
+    /// `geckodriver` does not.
+    ///
+    /// Use [`get_log`][SessionHandle::get_log] /
+    /// [`browser_log`][SessionHandle::browser_log] directly — those work
+    /// against modern `chromedriver`.
+    pub async fn get_log_types(&self) -> WebDriverResult<Vec<String>> {
+        self.cmd(Command::GetLogTypes).await?.value()
+    }
+
+    /// Drain the named log buffer (`POST /session/{id}/log`).
+    ///
+    /// The most useful log type is `"browser"` — that is where
+    /// `chromedriver` reports `console.*` output and uncaught JavaScript
+    /// errors. See [`browser_log`][SessionHandle::browser_log] for a
+    /// type-shorthand wrapper.
+    ///
+    /// Each call **drains** the buffer: subsequent calls return only
+    /// entries produced since the previous call. Not part of W3C
+    /// WebDriver — `geckodriver` does not implement it. Modern
+    /// `chromedriver` accepts this endpoint even in W3C mode provided
+    /// the session was created with the `goog:loggingPrefs` capability;
+    /// see [`set_browser_log_level`][sblp].
+    ///
+    /// [sblp]: crate::ChromiumLikeCapabilities::set_browser_log_level
+    pub async fn get_log(&self, log_type: &str) -> WebDriverResult<Vec<crate::BrowserLogEntry>> {
+        self.cmd(Command::GetLog(log_type.into())).await?.value()
+    }
+
+    /// Drain the `"browser"` log buffer — shorthand for
+    /// `get_log("browser")`.
+    ///
+    /// Requires `goog:loggingPrefs.browser` to have been set on session
+    /// creation; see
+    /// [`ChromiumLikeCapabilities::set_browser_log_level`][sblp]. Not
+    /// supported by `geckodriver`.
+    ///
+    /// [sblp]: crate::ChromiumLikeCapabilities::set_browser_log_level
+    pub async fn browser_log(&self) -> WebDriverResult<Vec<crate::BrowserLogEntry>> {
+        self.get_log("browser").await
+    }
+
     /// Set the current window name.
     ///
     /// Useful for switching between windows/tabs using [`WebDriver::switch_to_named_window`]

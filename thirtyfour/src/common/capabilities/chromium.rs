@@ -3,8 +3,9 @@ use std::path::Path;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use pastey::paste;
 use serde::Serialize;
-use serde_json::to_value;
+use serde_json::{Value, to_value};
 
+use crate::common::log::LoggingPrefsLogLevel;
 use crate::error::WebDriverResult;
 use crate::{BrowserCapabilitiesHelper, Capabilities};
 
@@ -173,6 +174,51 @@ pub trait ChromiumLikeCapabilities: BrowserCapabilitiesHelper {
             args.retain(|v| v != arg);
             self.add_experimental_option("excludeSwitches", to_value(args)?)
         }
+    }
+
+    /// Set a single `goog:loggingPrefs` entry (e.g. `("browser", Info)`).
+    ///
+    /// `chromedriver` uses this capability to decide which log buffers to
+    /// populate. The most useful component is `"browser"`, which captures
+    /// page-side `console.*` calls and uncaught JavaScript errors and
+    /// makes them retrievable via
+    /// [`SessionHandle::browser_log`][bl] /
+    /// [`SessionHandle::get_log`][gl]. Setting this capability is a
+    /// **prerequisite** — without it, `chromedriver` returns an empty
+    /// list from the `/log` endpoint regardless of what the page does.
+    ///
+    /// Existing entries are preserved; calling this twice for different
+    /// components is fine.
+    ///
+    /// [bl]: crate::session::handle::SessionHandle::browser_log
+    /// [gl]: crate::session::handle::SessionHandle::get_log
+    fn set_logging_prefs(
+        &mut self,
+        component: impl Into<String>,
+        log_level: LoggingPrefsLogLevel,
+    ) -> WebDriverResult<()> {
+        let level = to_value(log_level)?;
+        let key = component.into();
+        match self.as_mut().get_mut("goog:loggingPrefs") {
+            Some(Value::Object(obj)) => {
+                obj.insert(key, level);
+                Ok(())
+            }
+            _ => {
+                let mut obj = serde_json::Map::new();
+                obj.insert(key, level);
+                self.set("goog:loggingPrefs", Value::Object(obj))
+            }
+        }
+    }
+
+    /// Convenience: enable browser-log capture at the given level.
+    ///
+    /// Equivalent to `set_logging_prefs("browser", level)`. Use
+    /// [`LoggingPrefsLogLevel::All`] to capture every `console.*` call;
+    /// use [`LoggingPrefsLogLevel::Severe`] for errors only.
+    fn set_browser_log_level(&mut self, level: LoggingPrefsLogLevel) -> WebDriverResult<()> {
+        self.set_logging_prefs("browser", level)
     }
 
     chromium_arg_wrapper! {
