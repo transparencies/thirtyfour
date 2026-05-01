@@ -4,7 +4,55 @@ use serde::{Deserialize, Serialize};
 
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, CdpEvent, Empty};
+use crate::cdp::macros::string_enum;
 use crate::error::WebDriverResult;
+
+string_enum! {
+    /// Severity level reported by [`LogEntry`].
+    pub enum LogLevel {
+        /// Verbose / debug-level output.
+        Verbose = "verbose",
+        /// Informational message.
+        Info = "info",
+        /// Warning.
+        Warning = "warning",
+        /// Error.
+        Error = "error",
+    }
+}
+
+string_enum! {
+    /// Originating subsystem reported by [`LogEntry`]. Mirrors CDP's
+    /// `Log.LogEntry.source`.
+    pub enum LogSource {
+        /// XML parsing/processing.
+        Xml = "xml",
+        /// Page JavaScript runtime.
+        Javascript = "javascript",
+        /// Network stack.
+        Network = "network",
+        /// Storage subsystem.
+        Storage = "storage",
+        /// Application cache.
+        AppCache = "appcache",
+        /// Rendering engine.
+        Rendering = "rendering",
+        /// Security policies.
+        Security = "security",
+        /// Deprecation warnings.
+        Deprecation = "deprecation",
+        /// Web worker.
+        Worker = "worker",
+        /// Best-practices violation.
+        Violation = "violation",
+        /// Browser intervention.
+        Intervention = "intervention",
+        /// Recommendation.
+        Recommendation = "recommendation",
+        /// Anything else.
+        Other = "other",
+    }
+}
 
 /// `Log.enable`.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -34,12 +82,10 @@ impl CdpCommand for Clear {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogEntry {
-    /// Source: `"xml"`, `"javascript"`, `"network"`, `"storage"`, `"appcache"`,
-    /// `"rendering"`, `"security"`, `"deprecation"`, `"worker"`, `"violation"`,
-    /// `"intervention"`, `"recommendation"`, `"other"`.
-    pub source: String,
-    /// `"verbose"`, `"info"`, `"warning"`, or `"error"`.
-    pub level: String,
+    /// Originating subsystem.
+    pub source: LogSource,
+    /// Severity level.
+    pub level: LogLevel,
     /// Logged text.
     pub text: String,
     /// Timestamp of the entry.
@@ -120,8 +166,8 @@ mod tests {
             }
         });
         let evt: EntryAdded = serde_json::from_value(body).unwrap();
-        assert_eq!(evt.entry.source, "javascript");
-        assert_eq!(evt.entry.level, "error");
+        assert_eq!(evt.entry.source, LogSource::Javascript);
+        assert_eq!(evt.entry.level, LogLevel::Error);
         assert_eq!(evt.entry.text, "Uncaught TypeError");
         assert!(evt.entry.url.is_none());
         assert!(evt.entry.line_number.is_none());
@@ -140,7 +186,39 @@ mod tests {
             }
         });
         let evt: EntryAdded = serde_json::from_value(body).unwrap();
+        assert_eq!(evt.entry.source, LogSource::Network);
+        assert_eq!(evt.entry.level, LogLevel::Warning);
         assert_eq!(evt.entry.url.as_deref(), Some("https://x"));
         assert_eq!(evt.entry.line_number, Some(42));
+    }
+
+    #[test]
+    fn log_level_round_trip() {
+        for (variant, wire) in [
+            (LogLevel::Verbose, "verbose"),
+            (LogLevel::Info, "info"),
+            (LogLevel::Warning, "warning"),
+            (LogLevel::Error, "error"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
+    }
+
+    #[test]
+    fn log_source_round_trip_subset() {
+        for (variant, wire) in [
+            (LogSource::Javascript, "javascript"),
+            (LogSource::Network, "network"),
+            (LogSource::AppCache, "appcache"),
+            (LogSource::Other, "other"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
+    }
+
+    #[test]
+    fn log_source_unknown_round_trip() {
+        let v: LogSource = serde_json::from_value(json!("future-source")).unwrap();
+        assert_eq!(v, LogSource::Unknown("future-source".to_string()));
     }
 }

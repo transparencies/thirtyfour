@@ -7,33 +7,112 @@ use serde::{Deserialize, Serialize};
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, CdpEvent, Empty};
 use crate::cdp::ids::{LoaderId, RequestId};
+use crate::cdp::macros::string_enum;
 use crate::error::WebDriverResult;
 
-/// Connection type for network throttling.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ConnectionType {
-    /// No connection.
-    None,
-    /// 2G cellular.
-    #[serde(rename = "cellular2g")]
-    Cellular2G,
-    /// 3G cellular.
-    #[serde(rename = "cellular3g")]
-    Cellular3G,
-    /// 4G cellular.
-    #[serde(rename = "cellular4g")]
-    Cellular4G,
-    /// Bluetooth.
-    Bluetooth,
-    /// Ethernet.
-    Ethernet,
-    /// WiFi.
-    Wifi,
-    /// WiMAX.
-    Wimax,
-    /// Other.
-    Other,
+string_enum! {
+    /// Connection type for network throttling
+    /// (`Network.ConnectionType`).
+    pub enum ConnectionType {
+        /// No connection.
+        None = "none",
+        /// 2G cellular.
+        Cellular2G = "cellular2g",
+        /// 3G cellular.
+        Cellular3G = "cellular3g",
+        /// 4G cellular.
+        Cellular4G = "cellular4g",
+        /// Bluetooth.
+        Bluetooth = "bluetooth",
+        /// Ethernet.
+        Ethernet = "ethernet",
+        /// WiFi.
+        Wifi = "wifi",
+        /// WiMAX.
+        Wimax = "wimax",
+        /// Other.
+        Other = "other",
+    }
+}
+
+string_enum! {
+    /// Reason a network request failed (`Network.ErrorReason`). Used by
+    /// [`crate::cdp::domains::fetch::FailRequest`] and seen on
+    /// [`LoadingFailed`] / [`crate::cdp::domains::fetch::RequestPaused`]
+    /// events.
+    pub enum ErrorReason {
+        /// Generic failure.
+        Failed = "Failed",
+        /// Request was aborted (e.g. user navigation).
+        Aborted = "Aborted",
+        /// Request timed out.
+        TimedOut = "TimedOut",
+        /// Access was denied (e.g. CORS).
+        AccessDenied = "AccessDenied",
+        /// Connection was closed.
+        ConnectionClosed = "ConnectionClosed",
+        /// Connection was reset.
+        ConnectionReset = "ConnectionReset",
+        /// Connection was refused.
+        ConnectionRefused = "ConnectionRefused",
+        /// Connection was aborted.
+        ConnectionAborted = "ConnectionAborted",
+        /// Connection failed for another reason.
+        ConnectionFailed = "ConnectionFailed",
+        /// DNS resolution failed.
+        NameNotResolved = "NameNotResolved",
+        /// Browser is offline.
+        InternetDisconnected = "InternetDisconnected",
+        /// Address could not be reached.
+        AddressUnreachable = "AddressUnreachable",
+        /// Blocked by client (e.g. extension).
+        BlockedByClient = "BlockedByClient",
+        /// Blocked by server response (e.g. CSP).
+        BlockedByResponse = "BlockedByResponse",
+    }
+}
+
+string_enum! {
+    /// Resource type classification used by `Network` and `Fetch` events
+    /// (`Network.ResourceType`).
+    pub enum ResourceType {
+        /// HTML document.
+        Document = "Document",
+        /// CSS stylesheet.
+        Stylesheet = "Stylesheet",
+        /// Image (raster or SVG).
+        Image = "Image",
+        /// Audio or video.
+        Media = "Media",
+        /// Web font.
+        Font = "Font",
+        /// JavaScript script.
+        Script = "Script",
+        /// `<track>` text track.
+        TextTrack = "TextTrack",
+        /// `XMLHttpRequest`.
+        Xhr = "XHR",
+        /// `fetch()` API.
+        Fetch = "Fetch",
+        /// `<link rel="prefetch">`.
+        Prefetch = "Prefetch",
+        /// Server-Sent Events.
+        EventSource = "EventSource",
+        /// WebSocket.
+        WebSocket = "WebSocket",
+        /// Web app manifest.
+        Manifest = "Manifest",
+        /// Signed Exchange.
+        SignedExchange = "SignedExchange",
+        /// `navigator.sendBeacon` ping.
+        Ping = "Ping",
+        /// CSP violation report.
+        CspViolationReport = "CSPViolationReport",
+        /// CORS preflight.
+        Preflight = "Preflight",
+        /// Anything else.
+        Other = "Other",
+    }
 }
 
 /// Simulated network conditions for `Network.emulateNetworkConditions`.
@@ -236,8 +315,8 @@ pub struct ResponseReceived {
     pub loader_id: LoaderId,
     /// Timestamp.
     pub timestamp: f64,
-    /// Resource type (e.g. `"Document"`, `"XHR"`, `"Image"`).
-    pub r#type: String,
+    /// Resource type (e.g. `Document`, `Xhr`, `Image`).
+    pub r#type: ResourceType,
     /// Full response details (status, headers, mime type, etc.).
     pub response: serde_json::Value,
 }
@@ -269,7 +348,7 @@ pub struct LoadingFailed {
     /// Timestamp.
     pub timestamp: f64,
     /// Resource type.
-    pub r#type: String,
+    pub r#type: ResourceType,
     /// User-friendly error message.
     pub error_text: String,
     /// Whether the loading was canceled.
@@ -473,8 +552,54 @@ mod tests {
             (ConnectionType::Wimax, "wimax"),
             (ConnectionType::Other, "other"),
         ] {
-            assert_eq!(serde_json::to_value(variant).unwrap(), json!(wire));
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
         }
+    }
+
+    #[test]
+    fn connection_type_unknown_round_trip() {
+        let v: ConnectionType = serde_json::from_value(json!("future-type")).unwrap();
+        assert_eq!(v, ConnectionType::Unknown("future-type".to_string()));
+    }
+
+    #[test]
+    fn error_reason_wire_strings() {
+        for (variant, wire) in [
+            (ErrorReason::Failed, "Failed"),
+            (ErrorReason::Aborted, "Aborted"),
+            (ErrorReason::TimedOut, "TimedOut"),
+            (ErrorReason::AccessDenied, "AccessDenied"),
+            (ErrorReason::ConnectionClosed, "ConnectionClosed"),
+            (ErrorReason::ConnectionReset, "ConnectionReset"),
+            (ErrorReason::ConnectionRefused, "ConnectionRefused"),
+            (ErrorReason::ConnectionAborted, "ConnectionAborted"),
+            (ErrorReason::ConnectionFailed, "ConnectionFailed"),
+            (ErrorReason::NameNotResolved, "NameNotResolved"),
+            (ErrorReason::InternetDisconnected, "InternetDisconnected"),
+            (ErrorReason::AddressUnreachable, "AddressUnreachable"),
+            (ErrorReason::BlockedByClient, "BlockedByClient"),
+            (ErrorReason::BlockedByResponse, "BlockedByResponse"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
+    }
+
+    #[test]
+    fn resource_type_wire_strings() {
+        for (variant, wire) in [
+            (ResourceType::Document, "Document"),
+            (ResourceType::Xhr, "XHR"),
+            (ResourceType::CspViolationReport, "CSPViolationReport"),
+            (ResourceType::Other, "Other"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
+    }
+
+    #[test]
+    fn resource_type_unknown_round_trip() {
+        let v: ResourceType = serde_json::from_value(json!("FutureType")).unwrap();
+        assert_eq!(v, ResourceType::Unknown("FutureType".to_string()));
     }
 
     #[test]
@@ -560,7 +685,7 @@ mod tests {
         });
         let evt: ResponseReceived = serde_json::from_value(body).unwrap();
         assert_eq!(evt.request_id.as_str(), "R1");
-        assert_eq!(evt.r#type, "Document");
+        assert_eq!(evt.r#type, ResourceType::Document);
     }
 
     #[test]
@@ -584,6 +709,7 @@ mod tests {
             "canceled": false
         });
         let evt: LoadingFailed = serde_json::from_value(body).unwrap();
+        assert_eq!(evt.r#type, ResourceType::Xhr);
         assert_eq!(evt.error_text, "net::ERR_FAILED");
         assert_eq!(evt.canceled, Some(false));
     }

@@ -4,14 +4,61 @@ use serde::Serialize;
 
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, Empty};
+use crate::cdp::macros::string_enum;
 use crate::error::WebDriverResult;
+
+string_enum! {
+    /// Type of synthetic keyboard event for [`DispatchKeyEvent`].
+    pub enum KeyEventType {
+        /// Key pressed down.
+        KeyDown = "keyDown",
+        /// Key released.
+        KeyUp = "keyUp",
+        /// Raw key down (skips the OS-level translation step).
+        RawKeyDown = "rawKeyDown",
+        /// Inserts a character (e.g. for IME).
+        Char = "char",
+    }
+}
+
+string_enum! {
+    /// Type of synthetic mouse event for [`DispatchMouseEvent`].
+    pub enum MouseEventType {
+        /// Mouse button pressed.
+        MousePressed = "mousePressed",
+        /// Mouse button released.
+        MouseReleased = "mouseReleased",
+        /// Mouse moved.
+        MouseMoved = "mouseMoved",
+        /// Mouse wheel scrolled.
+        MouseWheel = "mouseWheel",
+    }
+}
+
+string_enum! {
+    /// Mouse button identifier for [`DispatchMouseEvent`].
+    pub enum MouseButton {
+        /// No button.
+        None = "none",
+        /// Left button.
+        Left = "left",
+        /// Middle button.
+        Middle = "middle",
+        /// Right button.
+        Right = "right",
+        /// Back button.
+        Back = "back",
+        /// Forward button.
+        Forward = "forward",
+    }
+}
 
 /// `Input.dispatchKeyEvent`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DispatchKeyEvent {
-    /// `"keyDown"`, `"keyUp"`, `"rawKeyDown"`, or `"char"`.
-    pub r#type: String,
+    /// Event phase.
+    pub r#type: KeyEventType,
     /// Bit mask of [Modifiers](https://chromedevtools.github.io/devtools-protocol/tot/Input/#method-dispatchKeyEvent).
     /// 1=Alt, 2=Ctrl, 4=Meta, 8=Shift.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,8 +100,8 @@ impl CdpCommand for DispatchKeyEvent {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DispatchMouseEvent {
-    /// `"mousePressed"`, `"mouseReleased"`, `"mouseMoved"`, or `"mouseWheel"`.
-    pub r#type: String,
+    /// Event phase.
+    pub r#type: MouseEventType,
     /// X coordinate of the event relative to the main frame's viewport in CSS pixels.
     pub x: f64,
     /// Y coordinate of the event relative to the main frame's viewport in CSS pixels.
@@ -62,9 +109,9 @@ pub struct DispatchMouseEvent {
     /// Bit mask of modifiers (see [`DispatchKeyEvent::modifiers`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modifiers: Option<u32>,
-    /// `"none"`, `"left"`, `"middle"`, `"right"`, `"back"`, `"forward"`.
+    /// Mouse button identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub button: Option<String>,
+    pub button: Option<MouseButton>,
     /// Number of times the mouse button was clicked. Defaults to 0.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub click_count: Option<u32>,
@@ -138,7 +185,7 @@ mod tests {
     #[test]
     fn dispatch_key_event_skips_optional_fields() {
         let v = serde_json::to_value(DispatchKeyEvent {
-            r#type: "keyDown".to_string(),
+            r#type: KeyEventType::KeyDown,
             modifiers: None,
             text: None,
             unmodified_text: None,
@@ -172,7 +219,7 @@ mod tests {
     #[test]
     fn dispatch_key_event_full() {
         let v = serde_json::to_value(DispatchKeyEvent {
-            r#type: "keyDown".to_string(),
+            r#type: KeyEventType::KeyDown,
             modifiers: Some(8),
             text: Some("A".to_string()),
             unmodified_text: Some("a".to_string()),
@@ -195,7 +242,7 @@ mod tests {
     #[test]
     fn dispatch_mouse_event_required_fields() {
         let v = serde_json::to_value(DispatchMouseEvent {
-            r#type: "mouseMoved".to_string(),
+            r#type: MouseEventType::MouseMoved,
             x: 10.5,
             y: 20.5,
             modifiers: None,
@@ -214,11 +261,11 @@ mod tests {
     #[test]
     fn dispatch_mouse_event_wheel() {
         let v = serde_json::to_value(DispatchMouseEvent {
-            r#type: "mouseWheel".to_string(),
+            r#type: MouseEventType::MouseWheel,
             x: 0.0,
             y: 0.0,
             modifiers: Some(0),
-            button: Some("none".to_string()),
+            button: Some(MouseButton::None),
             click_count: Some(0),
             delta_x: Some(0.0),
             delta_y: Some(120.0),
@@ -227,5 +274,49 @@ mod tests {
         assert_eq!(v["button"], "none");
         assert_eq!(v["clickCount"], 0);
         assert_eq!(v["deltaY"], 120.0);
+    }
+
+    #[test]
+    fn key_event_type_round_trip() {
+        for (variant, wire) in [
+            (KeyEventType::KeyDown, "keyDown"),
+            (KeyEventType::KeyUp, "keyUp"),
+            (KeyEventType::RawKeyDown, "rawKeyDown"),
+            (KeyEventType::Char, "char"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), serde_json::json!(wire));
+        }
+    }
+
+    #[test]
+    fn mouse_event_type_round_trip() {
+        for (variant, wire) in [
+            (MouseEventType::MousePressed, "mousePressed"),
+            (MouseEventType::MouseReleased, "mouseReleased"),
+            (MouseEventType::MouseMoved, "mouseMoved"),
+            (MouseEventType::MouseWheel, "mouseWheel"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), serde_json::json!(wire));
+        }
+    }
+
+    #[test]
+    fn mouse_button_round_trip_all_variants() {
+        for (variant, wire) in [
+            (MouseButton::None, "none"),
+            (MouseButton::Left, "left"),
+            (MouseButton::Middle, "middle"),
+            (MouseButton::Right, "right"),
+            (MouseButton::Back, "back"),
+            (MouseButton::Forward, "forward"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), serde_json::json!(wire));
+        }
+    }
+
+    #[test]
+    fn unknown_variants_round_trip() {
+        let k: KeyEventType = serde_json::from_value(serde_json::json!("future")).unwrap();
+        assert_eq!(k, KeyEventType::Unknown("future".to_string()));
     }
 }

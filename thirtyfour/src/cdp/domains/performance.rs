@@ -4,15 +4,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, Empty};
+use crate::cdp::macros::string_enum;
 use crate::error::WebDriverResult;
+
+string_enum! {
+    /// Clock domain used by `Performance` metrics.
+    pub enum TimeDomain {
+        /// Wall-clock time ticks.
+        TimeTicks = "timeTicks",
+        /// Per-thread CPU ticks.
+        ThreadTicks = "threadTicks",
+    }
+}
 
 /// `Performance.enable`.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Enable {
-    /// Time domain for the metrics: `"timeTicks"` or `"threadTicks"`.
+    /// Time domain for the metrics.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub time_domain: Option<String>,
+    pub time_domain: Option<TimeDomain>,
 }
 impl CdpCommand for Enable {
     const METHOD: &'static str = "Performance.enable";
@@ -102,10 +113,19 @@ mod tests {
     #[test]
     fn enable_with_time_domain() {
         let v = serde_json::to_value(Enable {
-            time_domain: Some("threadTicks".to_string()),
+            time_domain: Some(TimeDomain::ThreadTicks),
         })
         .unwrap();
         assert_eq!(v["timeDomain"], "threadTicks");
+    }
+
+    #[test]
+    fn time_domain_round_trip() {
+        for (variant, wire) in
+            [(TimeDomain::TimeTicks, "timeTicks"), (TimeDomain::ThreadTicks, "threadTicks")]
+        {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
     }
 
     #[test]

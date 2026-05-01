@@ -153,27 +153,8 @@ fn id_newtypes_serialise_transparently() {
     assert_eq!(serde_json::to_value(node).unwrap(), json!(42));
 }
 
-#[test]
-fn input_dispatch_key_event_required_fields() {
-    let cmd = input::DispatchKeyEvent {
-        r#type: "keyDown".to_string(),
-        modifiers: Some(0),
-        text: Some("a".to_string()),
-        unmodified_text: None,
-        key: Some("a".to_string()),
-        code: Some("KeyA".to_string()),
-        native_virtual_key_code: None,
-        windows_virtual_key_code: None,
-        auto_repeat: None,
-        is_keypad: None,
-        is_system_key: None,
-    };
-    let v = serde_json::to_value(&cmd).unwrap();
-    assert_eq!(v["type"], "keyDown");
-    assert_eq!(v["text"], "a");
-    assert_eq!(v["code"], "KeyA");
-    assert!(v.get("nativeVirtualKeyCode").is_none());
-}
+// Per-domain coverage of `DispatchKeyEvent` lives in
+// `cdp/domains/input.rs::tests` (with the typed `KeyEventType`).
 
 #[test]
 fn version_info_parses_browser_get_version_response() {

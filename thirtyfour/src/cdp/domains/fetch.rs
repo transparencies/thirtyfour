@@ -4,8 +4,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, CdpEvent, Empty};
+use crate::cdp::domains::network::{ErrorReason, ResourceType};
 use crate::cdp::ids::FetchRequestId;
+use crate::cdp::macros::string_enum;
 use crate::error::WebDriverResult;
+
+string_enum! {
+    /// Stage at which the `Fetch` agent intercepts requests.
+    pub enum RequestStage {
+        /// Intercept before the request is sent (default).
+        Request = "Request",
+        /// Intercept after the response headers are received.
+        Response = "Response",
+    }
+}
 
 /// `Fetch.RequestPattern` for selecting requests to intercept.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -14,12 +26,12 @@ pub struct RequestPattern {
     /// URL pattern (with `*` wildcards). Defaults to `"*"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url_pattern: Option<String>,
-    /// Resource type filter (e.g. `"Document"`, `"XHR"`).
+    /// Resource type filter.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub resource_type: Option<String>,
-    /// `"Request"` (default) or `"Response"`.
+    pub resource_type: Option<ResourceType>,
+    /// Stage at which to intercept. Defaults to [`RequestStage::Request`].
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_stage: Option<String>,
+    pub request_stage: Option<RequestStage>,
 }
 
 /// `Fetch.enable`.
@@ -108,12 +120,10 @@ impl CdpCommand for FulfillRequest {
 pub struct FailRequest {
     /// Identifier of the paused request.
     pub request_id: FetchRequestId,
-    /// Error reason: `"Failed"`, `"Aborted"`, `"TimedOut"`, `"AccessDenied"`,
-    /// `"ConnectionClosed"`, `"ConnectionReset"`, `"ConnectionRefused"`,
-    /// `"ConnectionAborted"`, `"ConnectionFailed"`, `"NameNotResolved"`,
-    /// `"InternetDisconnected"`, `"AddressUnreachable"`, `"BlockedByClient"`,
-    /// `"BlockedByResponse"`.
-    pub error_reason: String,
+    /// Error reason. See [`ErrorReason`] for the closed set; use
+    /// [`ErrorReason::Unknown`] to send a value the curated set doesn't
+    /// have a typed variant for yet.
+    pub error_reason: ErrorReason,
 }
 impl CdpCommand for FailRequest {
     const METHOD: &'static str = "Fetch.failRequest";
@@ -131,9 +141,9 @@ pub struct RequestPaused {
     /// Frame id of the request.
     pub frame_id: String,
     /// Resource type.
-    pub resource_type: String,
+    pub resource_type: ResourceType,
     /// Response error reason if intercepted at the response stage.
-    pub response_error_reason: Option<String>,
+    pub response_error_reason: Option<ErrorReason>,
     /// Response status code if intercepted at the response stage.
     pub response_status_code: Option<u32>,
     /// Response status text if intercepted at the response stage.
@@ -184,16 +194,16 @@ impl<'a> FetchDomain<'a> {
         Ok(())
     }
 
-    /// `Fetch.failRequest`.
+    /// `Fetch.failRequest` with the given [`ErrorReason`].
     pub async fn fail_request(
         &self,
         request_id: FetchRequestId,
-        error_reason: impl Into<String>,
+        error_reason: ErrorReason,
     ) -> WebDriverResult<()> {
         self.cdp
             .send(FailRequest {
                 request_id,
-                error_reason: error_reason.into(),
+                error_reason,
             })
             .await?;
         Ok(())
@@ -230,8 +240,8 @@ mod tests {
         let v = serde_json::to_value(Enable {
             patterns: Some(vec![RequestPattern {
                 url_pattern: Some("*.json".to_string()),
-                resource_type: Some("XHR".to_string()),
-                request_stage: Some("Request".to_string()),
+                resource_type: Some(ResourceType::Xhr),
+                request_stage: Some(RequestStage::Request),
             }]),
             handle_auth_requests: Some(true),
         })
@@ -240,6 +250,15 @@ mod tests {
         assert_eq!(v["patterns"][0]["resourceType"], "XHR");
         assert_eq!(v["patterns"][0]["requestStage"], "Request");
         assert_eq!(v["handleAuthRequests"], true);
+    }
+
+    #[test]
+    fn request_stage_round_trip() {
+        for (variant, wire) in
+            [(RequestStage::Request, "Request"), (RequestStage::Response, "Response")]
+        {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
     }
 
     #[test]
@@ -318,15 +337,32 @@ mod tests {
     }
 
     #[test]
-    fn fail_request_serialises() {
+    fn fail_request_serialises_with_typed_reason() {
         let v = serde_json::to_value(FailRequest {
             request_id: FetchRequestId::from("R1"),
-            error_reason: "Failed".to_string(),
+            error_reason: ErrorReason::Failed,
         })
         .unwrap();
         assert_eq!(v["requestId"], "R1");
         assert_eq!(v["errorReason"], "Failed");
     }
+
+    #[test]
+    fn fail_request_with_unknown_reason() {
+        // Forward-compat path: a future browser error reason can still
+        // be sent via `ErrorReason::Unknown` without waiting for a
+        // thirtyfour update.
+        let v = serde_json::to_value(FailRequest {
+            request_id: FetchRequestId::from("R1"),
+            error_reason: ErrorReason::Unknown("FutureReason".to_string()),
+        })
+        .unwrap();
+        assert_eq!(v["errorReason"], "FutureReason");
+    }
+
+    // Round-trip and Unknown-variant tests for `ErrorReason` and
+    // `ResourceType` live alongside their canonical definitions in
+    // `cdp/domains/network.rs`.
 
     #[test]
     fn request_paused_event_parses() {
@@ -339,7 +375,7 @@ mod tests {
         let evt: RequestPaused = serde_json::from_value(body).unwrap();
         assert_eq!(evt.request_id.as_str(), "R1");
         assert_eq!(evt.frame_id, "F1");
-        assert_eq!(evt.resource_type, "Document");
+        assert_eq!(evt.resource_type, ResourceType::Document);
         assert!(evt.response_status_code.is_none());
     }
 

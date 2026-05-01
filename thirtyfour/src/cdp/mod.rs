@@ -44,6 +44,7 @@ mod command;
 mod error;
 mod handle;
 mod ids;
+mod macros;
 mod transport;
 
 #[cfg(test)]

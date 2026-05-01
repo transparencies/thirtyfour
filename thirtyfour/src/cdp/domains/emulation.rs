@@ -4,7 +4,20 @@ use serde::Serialize;
 
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, Empty};
+use crate::cdp::macros::string_enum;
 use crate::error::WebDriverResult;
+
+string_enum! {
+    /// Emulated CSS media type for [`SetEmulatedMedia`]. The CDP spec
+    /// allows any string here, but these are the values that actually
+    /// affect rendering.
+    pub enum MediaType {
+        /// Default screen rendering.
+        Screen = "screen",
+        /// Print stylesheet rendering.
+        Print = "print",
+    }
+}
 
 /// `Emulation.setDeviceMetricsOverride`.
 #[derive(Debug, Clone, Serialize)]
@@ -112,9 +125,9 @@ pub struct MediaFeature {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetEmulatedMedia {
-    /// Media type to emulate (`"screen"`, `"print"`, or empty to reset).
+    /// Media type to emulate. `None` resets to the default.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub media: Option<String>,
+    pub media: Option<MediaType>,
     /// Media features to override.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub features: Option<Vec<MediaFeature>>,
@@ -324,7 +337,7 @@ mod tests {
     #[test]
     fn set_emulated_media_with_features() {
         let v = serde_json::to_value(SetEmulatedMedia {
-            media: Some("screen".to_string()),
+            media: Some(MediaType::Screen),
             features: Some(vec![MediaFeature {
                 name: "prefers-color-scheme".to_string(),
                 value: "dark".to_string(),
@@ -334,6 +347,13 @@ mod tests {
         assert_eq!(v["media"], "screen");
         assert_eq!(v["features"][0]["name"], "prefers-color-scheme");
         assert_eq!(v["features"][0]["value"], "dark");
+    }
+
+    #[test]
+    fn media_type_round_trip() {
+        for (variant, wire) in [(MediaType::Screen, "screen"), (MediaType::Print, "print")] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
     }
 
     #[test]

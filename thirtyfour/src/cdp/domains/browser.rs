@@ -4,7 +4,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, Empty};
+use crate::cdp::macros::string_enum;
 use crate::error::WebDriverResult;
+
+string_enum! {
+    /// Download policy for [`SetDownloadBehavior`].
+    pub enum DownloadBehavior {
+        /// Block downloads.
+        Deny = "deny",
+        /// Allow downloads, saving with their suggested filename.
+        Allow = "allow",
+        /// Allow downloads but rename each file using the request URL hash.
+        AllowAndName = "allowAndName",
+        /// Restore the browser's default behaviour.
+        Default = "default",
+    }
+}
 
 /// `Browser.getVersion`
 #[derive(Debug, Clone, Default, Serialize)]
@@ -44,12 +59,13 @@ impl CdpCommand for Close {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetDownloadBehavior {
-    /// Download behavior: `"deny"`, `"allow"`, `"allowAndName"`, `"default"`.
-    pub behavior: String,
+    /// Download behavior.
+    pub behavior: DownloadBehavior,
     /// Browser context to apply the change to (omit for default context).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub browser_context_id: Option<String>,
-    /// Directory to download files into. Required when `behavior` is `"allow"` or `"allowAndName"`.
+    /// Directory to download files into. Required when `behavior` is
+    /// [`DownloadBehavior::Allow`] or [`DownloadBehavior::AllowAndName`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub download_path: Option<String>,
     /// Whether to emit `Browser.downloadWillBegin` events.
@@ -89,12 +105,12 @@ impl<'a> BrowserDomain<'a> {
     /// `Browser.setDownloadBehavior` — control how downloads are handled.
     pub async fn set_download_behavior(
         &self,
-        behavior: impl Into<String>,
+        behavior: DownloadBehavior,
         download_path: Option<String>,
     ) -> WebDriverResult<()> {
         self.cdp
             .send(SetDownloadBehavior {
-                behavior: behavior.into(),
+                behavior,
                 browser_context_id: None,
                 download_path,
                 events_enabled: None,
@@ -136,7 +152,7 @@ mod tests {
     #[test]
     fn set_download_behavior_skips_optional_fields() {
         let cmd = SetDownloadBehavior {
-            behavior: "allow".to_string(),
+            behavior: DownloadBehavior::Allow,
             browser_context_id: None,
             download_path: Some("/tmp/d".to_string()),
             events_enabled: None,
@@ -151,7 +167,7 @@ mod tests {
     #[test]
     fn set_download_behavior_emits_browser_context_id() {
         let cmd = SetDownloadBehavior {
-            behavior: "deny".to_string(),
+            behavior: DownloadBehavior::Deny,
             browser_context_id: Some("CTX1".to_string()),
             download_path: None,
             events_enabled: Some(true),
@@ -159,5 +175,17 @@ mod tests {
         let v = serde_json::to_value(&cmd).unwrap();
         assert_eq!(v["browserContextId"], "CTX1");
         assert_eq!(v["eventsEnabled"], true);
+    }
+
+    #[test]
+    fn download_behavior_round_trip() {
+        for (variant, wire) in [
+            (DownloadBehavior::Deny, "deny"),
+            (DownloadBehavior::Allow, "allow"),
+            (DownloadBehavior::AllowAndName, "allowAndName"),
+            (DownloadBehavior::Default, "default"),
+        ] {
+            assert_eq!(serde_json::to_value(&variant).unwrap(), json!(wire));
+        }
     }
 }
