@@ -4,7 +4,6 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::Capabilities;
-use crate::common::capabilities::desiredcapabilities::CapabilitiesHelper;
 
 use super::error::ManagerError;
 use super::status::{Emitter, Status};
@@ -62,7 +61,7 @@ impl BrowserKind {
     /// Derive `BrowserKind` from a W3C capabilities object's `browserName`.
     pub fn from_capabilities(caps: &Capabilities) -> Result<Self, ManagerError> {
         let name = caps
-            ._get("browserName")
+            .get("browserName")
             .and_then(Value::as_str)
             .ok_or(ManagerError::MissingBrowserName)?;
         match name.to_ascii_lowercase().as_str() {
@@ -85,7 +84,7 @@ impl BrowserKind {
             BrowserKind::Edge => ("ms:edgeOptions", "binary"),
             BrowserKind::Safari => return None,
         };
-        caps._get(key)?.get(sub)?.as_str().map(str::to_owned)
+        caps.get(key)?.get(sub)?.as_str().map(str::to_owned)
     }
 }
 
@@ -329,21 +328,21 @@ mod tests {
     #[test]
     fn browser_kind_chrome() {
         let mut caps = Capabilities::new();
-        caps.insert("browserName".into(), json!("chrome"));
+        caps.set("browserName", "chrome").unwrap();
         assert_eq!(BrowserKind::from_capabilities(&caps).unwrap(), BrowserKind::Chrome);
     }
 
     #[test]
     fn browser_kind_chromium() {
         let mut caps = Capabilities::new();
-        caps.insert("browserName".into(), json!("chromium"));
+        caps.set("browserName", "chromium").unwrap();
         assert_eq!(BrowserKind::from_capabilities(&caps).unwrap(), BrowserKind::Chrome);
     }
 
     #[test]
     fn browser_kind_firefox() {
         let mut caps = Capabilities::new();
-        caps.insert("browserName".into(), json!("firefox"));
+        caps.set("browserName", "firefox").unwrap();
         assert_eq!(BrowserKind::from_capabilities(&caps).unwrap(), BrowserKind::Firefox);
     }
 
@@ -351,7 +350,7 @@ mod tests {
     fn browser_kind_edge() {
         for name in ["microsoftedge", "MicrosoftEdge", "edge", "msedge"] {
             let mut caps = Capabilities::new();
-            caps.insert("browserName".into(), json!(name));
+            caps.set("browserName", name).unwrap();
             assert_eq!(
                 BrowserKind::from_capabilities(&caps).unwrap(),
                 BrowserKind::Edge,
@@ -363,14 +362,14 @@ mod tests {
     #[test]
     fn browser_kind_safari() {
         let mut caps = Capabilities::new();
-        caps.insert("browserName".into(), json!("safari"));
+        caps.set("browserName", "safari").unwrap();
         assert_eq!(BrowserKind::from_capabilities(&caps).unwrap(), BrowserKind::Safari);
     }
 
     #[test]
     fn browser_kind_unsupported() {
         let mut caps = Capabilities::new();
-        caps.insert("browserName".into(), json!("ie"));
+        caps.set("browserName", "ie").unwrap();
         assert!(matches!(
             BrowserKind::from_capabilities(&caps),
             Err(ManagerError::UnsupportedBrowser(_))
@@ -388,7 +387,7 @@ mod tests {
     #[test]
     fn binary_from_caps_edge() {
         let mut caps = Capabilities::new();
-        caps.insert("ms:edgeOptions".into(), json!({"binary": "/path/to/msedge"}));
+        caps.set("ms:edgeOptions", json!({"binary": "/path/to/msedge"})).unwrap();
         assert_eq!(BrowserKind::Edge.binary_from_caps(&caps).as_deref(), Some("/path/to/msedge"));
     }
 
@@ -404,14 +403,14 @@ mod tests {
     #[test]
     fn binary_from_caps_chrome() {
         let mut caps = Capabilities::new();
-        caps.insert("goog:chromeOptions".into(), json!({"binary": "/path/to/chrome"}));
+        caps.set("goog:chromeOptions", json!({"binary": "/path/to/chrome"})).unwrap();
         assert_eq!(BrowserKind::Chrome.binary_from_caps(&caps).as_deref(), Some("/path/to/chrome"));
     }
 
     #[test]
     fn binary_from_caps_firefox() {
         let mut caps = Capabilities::new();
-        caps.insert("moz:firefoxOptions".into(), json!({"binary": "/path/to/firefox"}));
+        caps.set("moz:firefoxOptions", json!({"binary": "/path/to/firefox"})).unwrap();
         assert_eq!(
             BrowserKind::Firefox.binary_from_caps(&caps).as_deref(),
             Some("/path/to/firefox")

@@ -13,9 +13,7 @@ use thirtyfour::extensions::query::ElementPollerWithTimeout;
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
-
+async fn main() -> anyhow::Result<()> {
     let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
 
     // Navigate to https://wikipedia.org.

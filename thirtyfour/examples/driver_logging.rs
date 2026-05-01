@@ -9,7 +9,7 @@
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let driver = WebDriver::managed(DesiredCapabilities::chrome())
         // Print all output from chromedriver itself.
         .on_driver_log(|f| println!("Chromedriver: {}", f.line))

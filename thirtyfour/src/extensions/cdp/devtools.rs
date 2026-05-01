@@ -27,7 +27,7 @@ use std::sync::Arc;
 /// let driver = WebDriver::new("http://localhost:4444", caps).await?;
 ///
 /// // Create a ChromeDevTools struct like this.
-/// let dev_tools = ChromeDevTools::new(driver.handle.clone());
+/// let dev_tools = ChromeDevTools::new(driver.handle().clone());
 /// dev_tools.execute_cdp("Network.clearBrowserCache").await?;
 /// #         driver.quit().await?;
 /// #         Ok(())
@@ -54,7 +54,7 @@ impl ChromeDevTools {
     /// block_on(async {
     /// #         let caps = DesiredCapabilities::chrome();
     /// #         let driver = WebDriver::new("http://localhost:4444", caps).await?;
-    /// let dev_tools = ChromeDevTools::new(driver.handle.clone());
+    /// let dev_tools = ChromeDevTools::new(driver.handle().clone());
     /// #         driver.quit().await?;
     /// #         Ok(())
     /// #     })
@@ -85,7 +85,7 @@ impl ChromeDevTools {
     /// #         let caps = DesiredCapabilities::chrome();
     /// #         let driver = WebDriver::new("http://localhost:4444", caps).await?;
     /// // Create ChromeDevTools struct.
-    /// let dev_tools = ChromeDevTools::new(driver.handle.clone());
+    /// let dev_tools = ChromeDevTools::new(driver.handle().clone());
     ///
     /// // First we need to set the network conditions.
     /// let mut conditions = NetworkConditions::new();
@@ -118,7 +118,7 @@ impl ChromeDevTools {
     /// #         let caps = DesiredCapabilities::chrome();
     /// #         let driver = WebDriver::new("http://localhost:4444", caps).await?;
     /// // Create ChromeDevTools struct.
-    /// let dev_tools = ChromeDevTools::new(driver.handle.clone());
+    /// let dev_tools = ChromeDevTools::new(driver.handle().clone());
     ///
     /// // Now we can set the network conditions. You do not need to set all parameters.
     /// let mut conditions = NetworkConditions::new();
@@ -163,7 +163,7 @@ impl ChromeDevTools {
     /// #     block_on(async {
     /// #         let caps = DesiredCapabilities::chrome();
     /// #         let driver = WebDriver::new("http://localhost:4444", caps).await?;
-    /// let dev_tools = ChromeDevTools::new(driver.handle.clone());
+    /// let dev_tools = ChromeDevTools::new(driver.handle().clone());
     /// dev_tools.execute_cdp("Network.clearBrowserCache").await?;
     ///
     /// // execute_cdp() can also return values as well.
@@ -194,7 +194,7 @@ impl ChromeDevTools {
     /// #     block_on(async {
     /// #         let caps = DesiredCapabilities::chrome();
     /// #         let driver = WebDriver::new("http://localhost:4444", caps).await?;
-    /// let dev_tools = ChromeDevTools::new(driver.handle.clone());
+    /// let dev_tools = ChromeDevTools::new(driver.handle().clone());
     /// dev_tools.execute_cdp_with_params("Network.setCacheDisabled", json!({"cacheDisabled": true})).await?;
     /// #         driver.quit().await?;
     /// #         Ok(())

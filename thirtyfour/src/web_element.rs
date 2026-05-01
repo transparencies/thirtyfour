@@ -56,10 +56,8 @@ use crate::{IntoArcStr, support};
 ///
 #[derive(Clone)]
 pub struct WebElement {
-    /// The element id.
-    pub element_id: ElementId,
-    /// The underlying session handle.
-    pub handle: Arc<SessionHandle>,
+    pub(crate) element_id: ElementId,
+    pub(crate) handle: Arc<SessionHandle>,
 }
 
 impl fmt::Debug for WebElement {
@@ -96,7 +94,7 @@ impl WebElement {
     /// assigned by the WebDriver.
     ///
     /// You can get the session handle from any existing `WebDriver` or
-    /// `WebElement` that is using this session, e.g. `driver.handle`.
+    /// `WebElement` that is using this session, e.g. `driver.handle()`.
     ///
     /// NOTE: if you simply want to convert a script's return value to a
     ///       `WebElement`, use [`ScriptRet::element`] instead.
@@ -127,6 +125,12 @@ impl WebElement {
     ///       use [`WebElement::id`] instead.
     pub fn element_id(&self) -> ElementId {
         self.element_id.clone()
+    }
+
+    /// Returns a reference to the underlying [`SessionHandle`].
+    /// Useful for extension code that needs to clone the handle.
+    pub fn handle(&self) -> &Arc<SessionHandle> {
+        &self.handle
     }
 
     /// Resolve this WebElement to a CDP `RemoteObjectId` so it can be passed
@@ -198,12 +202,6 @@ impl WebElement {
     pub async fn rect(&self) -> WebDriverResult<ElementRect> {
         let r = self.handle.cmd(Command::GetElementRect(self.element_id.clone())).await?;
         r.value()
-    }
-
-    /// Alias for [`WebElement::rect()`].
-    #[deprecated(since = "0.32.0", note = "Use rect() instead")]
-    pub async fn rectangle(&self) -> WebDriverResult<ElementRect> {
-        self.rect().await
     }
 
     /// Get the tag name for this WebElement.
@@ -382,12 +380,6 @@ impl WebElement {
         }
     }
 
-    /// Get the specified property.
-    #[deprecated(since = "0.30.0", note = "This method has been renamed to prop()")]
-    pub async fn get_property(&self, name: impl IntoArcStr) -> WebDriverResult<Option<String>> {
-        self.prop(name).await
-    }
-
     /// Get the specified attribute.
     ///
     /// # Example:
@@ -417,12 +409,6 @@ impl WebElement {
             .value()
     }
 
-    /// Get the specified attribute.
-    #[deprecated(since = "0.30.0", note = "This method has been renamed to attr()")]
-    pub async fn get_attribute(&self, name: impl IntoArcStr) -> WebDriverResult<Option<String>> {
-        self.attr(name).await
-    }
-
     /// Get the specified CSS property.
     ///
     /// # Example:
@@ -450,12 +436,6 @@ impl WebElement {
             .cmd(Command::GetElementCssValue(self.element_id.clone(), name.into()))
             .await?
             .value()
-    }
-
-    /// Get the specified CSS property.
-    #[deprecated(since = "0.30.0", note = "This method has been renamed to css_value()")]
-    pub async fn get_css_property(&self, name: impl IntoArcStr) -> WebDriverResult<String> {
-        self.css_value(name).await
     }
 
     /// Return true if the WebElement is currently selected, otherwise false.
@@ -599,12 +579,6 @@ impl WebElement {
         r.element(self.handle.clone())
     }
 
-    /// Search for a child element of this WebElement using the specified selector.
-    #[deprecated(since = "0.30.0", note = "This method has been renamed to find()")]
-    pub async fn find_element(&self, by: By) -> WebDriverResult<WebElement> {
-        self.find(by).await
-    }
-
     /// Search for all child elements of this WebElement that match the specified selector.
     ///
     /// **NOTE**: For more powerful element queries including polling and filters, see the
@@ -637,12 +611,6 @@ impl WebElement {
             .cmd(Command::FindElementsFromElement(self.element_id.clone(), by.into()))
             .await?;
         r.elements(self.handle.clone())
-    }
-
-    /// Search for all child elements of this WebElement that match the specified selector.
-    #[deprecated(since = "0.30.0", note = "This method has been renamed to find_all()")]
-    pub async fn find_elements(&self, by: By) -> WebDriverResult<Vec<WebElement>> {
-        self.find_all(by).await
     }
 
     /// Send the specified input.

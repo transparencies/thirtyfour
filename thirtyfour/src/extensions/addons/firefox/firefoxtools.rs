@@ -31,7 +31,7 @@ impl FirefoxTools {
     /// #         //       The test environment currently doesn't support firefox.
     /// #         let caps = DesiredCapabilities::chrome();
     /// #         let driver = WebDriver::new("http://localhost:4444", caps).await?;
-    /// let tools = FirefoxTools::new(driver.handle.clone());
+    /// let tools = FirefoxTools::new(driver.handle().clone());
     /// #         driver.quit().await?;
     /// #         Ok(())
     /// #     })

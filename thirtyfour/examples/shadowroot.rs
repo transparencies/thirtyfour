@@ -8,8 +8,7 @@
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
+async fn main() -> anyhow::Result<()> {
     unsafe {
         std::env::set_var("RUST_BACKTRACE", "1");
     }

@@ -9,8 +9,7 @@ use thirtyfour::cdp::domains::network::{ConnectionType, NetworkConditions};
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
+async fn main() -> anyhow::Result<()> {
     let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
 
     // Typed CDP — domain-grouped methods on `driver.cdp()`.

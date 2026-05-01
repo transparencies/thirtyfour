@@ -33,8 +33,7 @@ pub async fn start_session(
     config: &WebDriverConfig,
     capabilities: Capabilities,
 ) -> WebDriverResult<StartedSession> {
-    let request_data = Command::NewSession(serde_json::Value::Object(capabilities))
-        .format_request(&SessionId::null());
+    let request_data = Command::NewSession(capabilities.into()).format_request(&SessionId::null());
 
     let v = match run_webdriver_cmd(http_client, &request_data, server_url, config).await {
         Ok(x) => Ok(x),
@@ -77,7 +76,7 @@ pub async fn start_session(
         resp.session_id
     });
     let capabilities = match data.capabilities {
-        serde_json::Value::Object(map) => map,
+        serde_json::Value::Object(map) => Capabilities::from(map),
         _ => Capabilities::new(),
     };
 

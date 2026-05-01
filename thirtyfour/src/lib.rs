@@ -52,7 +52,7 @@
 //! use thirtyfour::prelude::*;
 //!
 //! #[tokio::main]
-//! async fn main() -> color_eyre::Result<()> {
+//! async fn main() -> anyhow::Result<()> {
 //!     let caps = DesiredCapabilities::chrome();
 //!     let driver = WebDriver::managed(caps).await?;
 //!
@@ -159,7 +159,6 @@
 pub use stringmatch;
 
 // Export types at root level.
-pub use alert::Alert;
 pub use common::cookie;
 pub use common::{
     capabilities::{
@@ -178,19 +177,16 @@ pub use common::{
     requestdata::*,
     types::*,
 };
-pub use switch_to::SwitchTo;
-pub use web_driver::WebDriver;
+pub use web_driver::{WebDriver, WebDriverBuilder};
 pub use web_element::WebElement;
 
 /// Allow importing the common types via `use thirtyfour::prelude::*`.
 pub mod prelude {
     pub use crate::WebDriver;
     pub use crate::WebElement;
-    pub use crate::alert::Alert;
     pub use crate::error::{WebDriverError, WebDriverResult};
     pub use crate::extensions::query::{ElementPoller, ElementQueryable, ElementWaitable};
     pub use crate::session::scriptret::ScriptRet;
-    pub use crate::switch_to::SwitchTo;
     pub use crate::{
         BrowserCapabilitiesHelper, By, Capabilities, CapabilitiesHelper, ChromiumLikeCapabilities,
         DesiredCapabilities,

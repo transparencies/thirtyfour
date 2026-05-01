@@ -153,8 +153,8 @@ async fn managed_chrome_options_and_dedup() -> WebDriverResult<()> {
         // should reuse a single chromedriver subprocess — both `WebDriver`
         // instances should point at the same server URL.
         assert_eq!(
-            d1.handle.server_url(),
-            d2.handle.server_url(),
+            d1.server_url(),
+            d2.server_url(),
             "two managed sessions for the same browser must share a chromedriver process"
         );
 

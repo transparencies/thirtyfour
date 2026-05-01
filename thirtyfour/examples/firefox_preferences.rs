@@ -9,11 +9,7 @@ use thirtyfour::common::capabilities::firefox::FirefoxPreferences;
 use thirtyfour::{FirefoxCapabilities, WebDriver};
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
-    // The use of color_eyre gives much nicer error reports, including making
-    // it much easier to locate where the error occurred.
-    color_eyre::install()?;
-
+async fn main() -> anyhow::Result<()> {
     let user_agent = "Custom";
 
     // Set user agent via Firefox preferences.

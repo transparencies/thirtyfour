@@ -9,7 +9,7 @@
 use thirtyfour::prelude::*;
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let driver = WebDriver::managed(DesiredCapabilities::chrome()).await?;
     // Navigate to https://wikipedia.org.
     driver.goto("https://wikipedia.org").await?;

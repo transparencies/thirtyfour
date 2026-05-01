@@ -418,3 +418,9 @@ impl From<serde_json::Error> for WebDriverError {
         WebDriverError::Json(err.to_string())
     }
 }
+
+impl From<http::header::InvalidHeaderValue> for WebDriverError {
+    fn from(err: http::header::InvalidHeaderValue) -> Self {
+        WebDriverError::ParseError(format!("invalid header value: {err}"))
+    }
+}
