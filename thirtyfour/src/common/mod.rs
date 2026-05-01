@@ -10,6 +10,8 @@ pub mod config;
 pub mod cookie;
 /// Types for working with keyboard input.
 pub mod keys;
+/// Browser log entry types and logging-preferences capability values.
+pub mod log;
 /// Types used with print commands.
 pub mod print;
 /// Type for request method and body.

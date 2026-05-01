@@ -2,6 +2,7 @@ use pastey::paste;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, from_value, json, to_value};
 
+pub use crate::common::log::LoggingPrefsLogLevel;
 use crate::error::WebDriverResult;
 use crate::{BrowserCapabilitiesHelper, Capabilities, CapabilitiesHelper};
 
@@ -159,30 +160,6 @@ pub enum LogLevel {
     /// Default log level.
     #[default]
     Default,
-}
-
-/// Log level for the webdriver server.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum LoggingPrefsLogLevel {
-    /// Disable logging.
-    Off,
-    /// Severe log level.
-    Severe,
-    /// Warning log level.
-    Warning,
-    /// Info log level.
-    Info,
-    /// Config log level.
-    Config,
-    /// Fine log level.
-    Fine,
-    /// Finer log level.
-    Finer,
-    /// Finest log level.
-    Finest,
-    /// All logs.
-    All,
 }
 
 /// Firefox preferences. See [`FirefoxCapabilities::set_preferences()`] for details.

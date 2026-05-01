@@ -265,6 +265,17 @@ pub enum Command {
     PrintPage(PrintParameters),
     TakeScreenshot,
     TakeElementScreenshot(ElementId),
+    /// Legacy Selenium endpoint: `GET /session/{id}/log/types`. Not part of
+    /// W3C WebDriver, but still implemented by `chromedriver`. Returns a
+    /// list of supported log type identifiers (e.g. `"browser"`,
+    /// `"driver"`).
+    GetLogTypes,
+    /// Legacy Selenium endpoint: `POST /session/{id}/log` with a
+    /// `{ "type": "<log_type>" }` body. Drains the named log buffer and
+    /// returns its entries. Not part of W3C WebDriver, but still
+    /// implemented by `chromedriver`. `geckodriver` does not support
+    /// either endpoint.
+    GetLog(Arc<str>),
     ExtensionCommand(Box<dyn ExtensionCommand + Send + Sync>),
 }
 
@@ -516,6 +527,13 @@ impl FormatRequestData for Command {
                 Method::GET,
                 format!("session/{}/element/{}/screenshot", session_id, element_id),
             ),
+            Command::GetLogTypes => {
+                RequestData::new(Method::GET, format!("session/{}/log/types", session_id))
+            }
+            Command::GetLog(log_type) => {
+                RequestData::new(Method::POST, format!("session/{}/log", session_id))
+                    .add_body(json!({ "type": log_type }))
+            }
             Command::ExtensionCommand(command) => {
                 let request_data = RequestData::new(
                     command.method(),

@@ -19,7 +19,7 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use thirtyfour::ChromeCapabilities;
 use thirtyfour::cdp::CdpSession;
-use thirtyfour::cdp::domains::{fetch, log, network, page, target};
+use thirtyfour::cdp::domains::{fetch, log, network, page, runtime, target};
 use thirtyfour::prelude::*;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -344,6 +344,109 @@ async fn log_entry_added_for_console_error() -> WebDriverResult<()> {
         let event = wait_for(&mut events, |_| true).await;
         // Just assert we got something with a non-empty text.
         assert!(!event.entry.text.is_empty());
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// Runtime events
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn runtime_console_api_called_for_console_log() -> WebDriverResult<()> {
+    with_timeout(async {
+        let (driver, session) = open_session().await?;
+        session.send(runtime::Enable).await.expect("Runtime.enable");
+        let mut events = session.subscribe::<runtime::ConsoleApiCalled>();
+
+        driver
+            .goto(
+                "data:text/html,<html><body><script>console.log('cdp-console-marker', 42);</script></body></html>",
+            )
+            .await?;
+
+        let event = wait_for(&mut events, |e| {
+            matches!(e.r#type, runtime::ConsoleApiType::Log)
+                && e.args.iter().any(|a| {
+                    a.value
+                        .as_ref()
+                        .and_then(|v| v.as_str())
+                        .map(|s| s == "cdp-console-marker")
+                        .unwrap_or(false)
+                })
+        })
+        .await;
+        assert_eq!(event.r#type, runtime::ConsoleApiType::Log);
+        assert!(
+            event.args.iter().any(|a| a.r#type == "number"),
+            "expected a number arg in {:?}",
+            event.args.iter().map(|a| &a.r#type).collect::<Vec<_>>()
+        );
+        assert!(event.timestamp > 0.0);
+
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn runtime_console_api_called_warning_type() -> WebDriverResult<()> {
+    with_timeout(async {
+        let (driver, session) = open_session().await?;
+        session.send(runtime::Enable).await.expect("Runtime.enable");
+        let mut events = session.subscribe::<runtime::ConsoleApiCalled>();
+
+        // CDP reports `console.warn` as `"warning"` (not `"warn"`); make
+        // sure the typed enum matches the wire value.
+        driver
+            .goto(
+                "data:text/html,<html><body><script>console.warn('cdp-warn-marker');</script></body></html>",
+            )
+            .await?;
+
+        let event = wait_for(&mut events, |e| {
+            e.args.iter().any(|a| {
+                a.value
+                    .as_ref()
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == "cdp-warn-marker")
+                    .unwrap_or(false)
+            })
+        })
+        .await;
+        assert_eq!(event.r#type, runtime::ConsoleApiType::Warning);
+
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn runtime_exception_thrown_for_uncaught_error() -> WebDriverResult<()> {
+    with_timeout(async {
+        let (driver, session) = open_session().await?;
+        session.send(runtime::Enable).await.expect("Runtime.enable");
+        let mut events = session.subscribe::<runtime::ExceptionThrown>();
+
+        driver
+            .goto(
+                "data:text/html,<html><body><script>setTimeout(()=>{throw new Error('cdp-exception-marker');},0);</script></body></html>",
+            )
+            .await?;
+
+        let event = wait_for(&mut events, |e| {
+            e.exception_details.text.contains("cdp-exception-marker")
+                || e.exception_details
+                    .exception
+                    .as_ref()
+                    .and_then(|o| o.description.as_ref())
+                    .map(|d| d.contains("cdp-exception-marker"))
+                    .unwrap_or(false)
+        })
+        .await;
+        assert!(event.timestamp > 0.0);
+
         driver.quit().await
     })
     .await

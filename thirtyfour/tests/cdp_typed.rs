@@ -888,6 +888,7 @@ async fn cdp_browser_get_version_via_command_struct() -> WebDriverResult<()> {
             performance::TimeDomain::TimeTicks,
             log::LogLevel::Error,
             log::LogSource::Javascript,
+            runtime::ConsoleApiType::Log,
             target::SetAutoAttach {
                 auto_attach: false,
                 wait_for_debugger_on_start: false,
@@ -895,6 +896,113 @@ async fn cdp_browser_get_version_via_command_struct() -> WebDriverResult<()> {
             },
             storage::ClearCookies::default(),
         );
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// Selenium legacy `/log` endpoint (chromedriver-only)
+//
+// chromedriver accepts `POST /session/{id}/log` even in W3C mode (provided
+// the session has a `goog:loggingPrefs` capability), but rejects the
+// companion `GET /session/{id}/log/types` with
+// `"Cannot call non W3C standard command while in W3C mode"`. The
+// `get_log_types` wrapper is wired up for completeness / older drivers /
+// Selenium Grid, but is not tested here against modern chromedriver.
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browser_log_via_selenium_endpoint() -> WebDriverResult<()> {
+    use thirtyfour::LoggingPrefsLogLevel;
+
+    with_timeout(async {
+        let mut caps = chrome_caps();
+        caps.set_browser_log_level(LoggingPrefsLogLevel::All)?;
+        let driver = WebDriver::managed(caps).await?;
+
+        driver
+            .goto(
+                "data:text/html,<html><body><script>console.log('hello-thirtyfour-log');\
+                console.error('hello-thirtyfour-err');</script></body></html>",
+            )
+            .await?;
+
+        // chromedriver buffers log entries lazily — poll briefly so a
+        // slow runner doesn't flake.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut entries = Vec::new();
+        while tokio::time::Instant::now() < deadline {
+            entries.extend(driver.browser_log().await?);
+            if entries.iter().any(|e| e.message.contains("hello-thirtyfour-log")) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        assert!(
+            entries.iter().any(|e| e.message.contains("hello-thirtyfour-log")),
+            "expected hello-thirtyfour-log in browser log, got: {:?}",
+            entries.iter().map(|e| &e.message).collect::<Vec<_>>(),
+        );
+
+        // Errors should also surface via the same buffer.
+        let mut have_err = entries.iter().any(|e| e.message.contains("hello-thirtyfour-err"));
+        let deadline2 = tokio::time::Instant::now() + Duration::from_secs(2);
+        while !have_err && tokio::time::Instant::now() < deadline2 {
+            entries.extend(driver.browser_log().await?);
+            have_err = entries.iter().any(|e| e.message.contains("hello-thirtyfour-err"));
+            if have_err {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        assert!(
+            have_err,
+            "expected hello-thirtyfour-err in browser log, got: {:?}",
+            entries.iter().map(|e| &e.message).collect::<Vec<_>>(),
+        );
+
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browser_log_drains_on_each_call() -> WebDriverResult<()> {
+    use thirtyfour::LoggingPrefsLogLevel;
+
+    with_timeout(async {
+        let mut caps = chrome_caps();
+        caps.set_browser_log_level(LoggingPrefsLogLevel::All)?;
+        let driver = WebDriver::managed(caps).await?;
+
+        driver
+            .goto(
+                "data:text/html,<html><body><script>console.log('drain-marker-1');</script></body></html>",
+            )
+            .await?;
+
+        // First read collects (possibly across multiple polls); second
+        // read should not see the same marker again — chromedriver
+        // drains the buffer per call.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut first = Vec::new();
+        while tokio::time::Instant::now() < deadline {
+            first.extend(driver.browser_log().await?);
+            if first.iter().any(|e| e.message.contains("drain-marker-1")) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        assert!(first.iter().any(|e| e.message.contains("drain-marker-1")));
+
+        let second = driver.browser_log().await?;
+        assert!(
+            !second.iter().any(|e| e.message.contains("drain-marker-1")),
+            "drain-marker-1 reappeared after drain: {:?}",
+            second.iter().map(|e| &e.message).collect::<Vec<_>>(),
+        );
+
         driver.quit().await
     })
     .await
