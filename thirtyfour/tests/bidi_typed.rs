@@ -467,8 +467,8 @@ async fn network_add_remove_intercept() -> WebDriverResult<()> {
             .add_intercept(vec![network::InterceptPhase::BeforeRequestSent], None)
             .await
             .map_err(bidi_to_wd)?;
-        assert!(!added.intercept.as_str().is_empty());
-        bidi.network().remove_intercept(added.intercept).await.map_err(bidi_to_wd)?;
+        assert!(!added.id().as_str().is_empty());
+        added.remove().await.map_err(bidi_to_wd)?;
         driver.quit().await
     })
     .await

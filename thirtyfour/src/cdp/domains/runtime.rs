@@ -263,6 +263,7 @@ pub struct ConsoleApiCalled {
 }
 impl CdpEvent for ConsoleApiCalled {
     const METHOD: &'static str = "Runtime.consoleAPICalled";
+    const ENABLE: Option<&'static str> = Some("Runtime.enable");
 }
 
 /// `Runtime.exceptionThrown` event — fired when an uncaught JavaScript
@@ -279,6 +280,7 @@ pub struct ExceptionThrown {
 }
 impl CdpEvent for ExceptionThrown {
     const METHOD: &'static str = "Runtime.exceptionThrown";
+    const ENABLE: Option<&'static str> = Some("Runtime.enable");
 }
 
 /// Domain facade returned by [`Cdp::runtime`].

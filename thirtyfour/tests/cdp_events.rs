@@ -148,7 +148,7 @@ async fn network_request_will_be_sent() -> WebDriverResult<()> {
         let url = spawn_local_http("<html><body>cdp test</body></html>").await?;
         let (driver, session) = open_session().await?;
         session.send(network::Enable::default()).await.expect("Network.enable");
-        let mut events = session.subscribe::<network::RequestWillBeSent>();
+        let mut events = session.subscribe::<network::RequestWillBeSent>().await?;
 
         driver.goto(&url).await?;
 
@@ -166,7 +166,7 @@ async fn network_response_received() -> WebDriverResult<()> {
         let url = spawn_local_http("<html><body>cdp resp</body></html>").await?;
         let (driver, session) = open_session().await?;
         session.send(network::Enable::default()).await.expect("Network.enable");
-        let mut events = session.subscribe::<network::ResponseReceived>();
+        let mut events = session.subscribe::<network::ResponseReceived>().await?;
 
         driver.goto(&url).await?;
 
@@ -185,7 +185,7 @@ async fn network_loading_finished() -> WebDriverResult<()> {
         let url = spawn_local_http("<html><body>cdp finish</body></html>").await?;
         let (driver, session) = open_session().await?;
         session.send(network::Enable::default()).await.expect("Network.enable");
-        let mut events = session.subscribe::<network::LoadingFinished>();
+        let mut events = session.subscribe::<network::LoadingFinished>().await?;
 
         driver.goto(&url).await?;
 
@@ -201,7 +201,7 @@ async fn network_loading_failed_for_unreachable_url() -> WebDriverResult<()> {
     with_timeout(async {
         let (driver, session) = open_session().await?;
         session.send(network::Enable::default()).await.expect("Network.enable");
-        let mut events = session.subscribe::<network::LoadingFailed>();
+        let mut events = session.subscribe::<network::LoadingFailed>().await?;
 
         // Inject a fetch to a port that's almost certainly closed. We
         // can't `goto` it because chromedriver waits for navigation; an
@@ -233,7 +233,7 @@ async fn page_lifecycle_event() -> WebDriverResult<()> {
             .await
             .expect("Page.setLifecycleEventsEnabled");
 
-        let mut events = session.subscribe::<page::LifecycleEvent>();
+        let mut events = session.subscribe::<page::LifecycleEvent>().await?;
         driver.goto("data:text/html,<html><body><h1>hello</h1></body></html>").await?;
 
         let event = wait_for(&mut events, |e| {
@@ -251,7 +251,7 @@ async fn page_frame_navigated() -> WebDriverResult<()> {
     with_timeout(async {
         let (driver, session) = open_session().await?;
         session.send(page::Enable).await.expect("Page.enable");
-        let mut events = session.subscribe::<page::FrameNavigated>();
+        let mut events = session.subscribe::<page::FrameNavigated>().await?;
 
         driver.goto("data:text/html,<html><body>frame nav</body></html>").await?;
 
@@ -268,7 +268,7 @@ async fn page_load_event_fired() -> WebDriverResult<()> {
     with_timeout(async {
         let (driver, session) = open_session().await?;
         session.send(page::Enable).await.expect("Page.enable");
-        let mut events = session.subscribe::<page::LoadEventFired>();
+        let mut events = session.subscribe::<page::LoadEventFired>().await?;
 
         driver.goto("data:text/html,<html><body>load fired</body></html>").await?;
 
@@ -289,7 +289,7 @@ async fn fetch_request_paused_then_continue() -> WebDriverResult<()> {
         let url = spawn_local_http("<html><body>fetch intercept</body></html>").await?;
         let (driver, session) = open_session().await?;
         session.send(fetch::Enable::default()).await.expect("Fetch.enable");
-        let mut events = session.subscribe::<fetch::RequestPaused>();
+        let mut events = session.subscribe::<fetch::RequestPaused>().await?;
 
         // `Fetch` intercepts navigations; this event will fire.
         let nav = {
@@ -333,7 +333,7 @@ async fn log_entry_added_for_console_error() -> WebDriverResult<()> {
     with_timeout(async {
         let (driver, session) = open_session().await?;
         session.send(log::Enable).await.expect("Log.enable");
-        let mut events = session.subscribe::<log::EntryAdded>();
+        let mut events = session.subscribe::<log::EntryAdded>().await?;
 
         // Navigate first, then trigger a deprecation/intervention-style
         // log message reliably. Calling `console.error` doesn't always go
@@ -362,7 +362,7 @@ async fn runtime_console_api_called_for_console_log() -> WebDriverResult<()> {
     with_timeout(async {
         let (driver, session) = open_session().await?;
         session.send(runtime::Enable).await.expect("Runtime.enable");
-        let mut events = session.subscribe::<runtime::ConsoleApiCalled>();
+        let mut events = session.subscribe::<runtime::ConsoleApiCalled>().await?;
 
         driver
             .goto(
@@ -399,7 +399,7 @@ async fn runtime_console_api_called_warning_type() -> WebDriverResult<()> {
     with_timeout(async {
         let (driver, session) = open_session().await?;
         session.send(runtime::Enable).await.expect("Runtime.enable");
-        let mut events = session.subscribe::<runtime::ConsoleApiCalled>();
+        let mut events = session.subscribe::<runtime::ConsoleApiCalled>().await?;
 
         // CDP reports `console.warn` as `"warning"` (not `"warn"`); make
         // sure the typed enum matches the wire value.
@@ -431,7 +431,7 @@ async fn runtime_exception_thrown_for_uncaught_error() -> WebDriverResult<()> {
     with_timeout(async {
         let (driver, session) = open_session().await?;
         session.send(runtime::Enable).await.expect("Runtime.enable");
-        let mut events = session.subscribe::<runtime::ExceptionThrown>();
+        let mut events = session.subscribe::<runtime::ExceptionThrown>().await?;
 
         driver
             .goto(
@@ -479,7 +479,7 @@ async fn target_attached_to_target_via_explicit_attach() -> WebDriverResult<()> 
             .await
             .expect("Target.createTarget");
 
-        let mut events = session.subscribe::<target::AttachedToTarget>();
+        let mut events = session.subscribe::<target::AttachedToTarget>().await?;
 
         let _ = session
             .send(target::AttachToTarget::flat(created.target_id.clone()))

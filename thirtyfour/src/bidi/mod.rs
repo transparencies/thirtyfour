@@ -48,21 +48,22 @@
 //! [`BiDi::send_raw`](crate::bidi::BiDi::send_raw) /
 //! [`BiDi::subscribe_raw`](crate::bidi::BiDi::subscribe_raw).
 
+pub mod events;
 pub mod modules;
 
 mod capabilities;
 mod command;
 mod error;
-mod events;
 mod handle;
 mod ids;
+mod stream;
 mod transport;
 
 pub use command::{BidiCommand, BidiEvent, Empty, RawEvent};
 pub use error::BidiError;
-pub use events::{EventStream, RawEventStream};
 pub use handle::BiDi;
 pub use ids::{
     BrowsingContextId, ChannelId, InterceptId, NavigationId, NodeId, PreloadScriptId, RealmId,
     RequestId, UserContextId,
 };
+pub use stream::{EventStream, RawEventStream};

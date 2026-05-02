@@ -4,7 +4,7 @@
 //! [`crate::bidi::BidiCommand`] and events implement
 //! [`crate::bidi::BidiEvent`]; both flow through [`crate::bidi::BiDi`].
 //!
-//! [W3C BiDi spec module]: https://w3c.github.io/webdriver-bidi/
+//! [W3C BiDi spec module]: https://w3c.github.io/webdriver-bidi/#protocol-modules
 
 /// `browser.*` — top-level browser control and user contexts.
 pub mod browser;

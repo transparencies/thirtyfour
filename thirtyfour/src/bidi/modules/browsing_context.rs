@@ -338,7 +338,7 @@ impl BidiCommand for HandleUserPrompt {
 // ---------------------------------------------------------------------------
 
 /// Events surfaced by the `browsingContext.*` module.
-pub mod events {
+pub(crate) mod events {
     use super::*;
 
     /// `browsingContext.contextCreated`.
@@ -491,6 +491,30 @@ impl<'a> BrowsingContextModule<'a> {
                 root,
             })
             .await
+    }
+
+    /// Convenience: id of the first top-level browsing context.
+    ///
+    /// Wraps `getTree` and returns `tree.contexts[0].context`. Errors if
+    /// the driver reports no top-level contexts (a fresh session always
+    /// has at least one). Use this when you just want "the active tab"
+    /// — most automation scripts want the first top-level context.
+    pub async fn top_level(&self) -> Result<BrowsingContextId, BidiError> {
+        let tree = self.get_tree(None).await?;
+        tree.contexts.into_iter().next().map(|c| c.context).ok_or_else(|| BidiError {
+            command: GetTree::METHOD.to_string(),
+            error: "unknown error".to_string(),
+            message: "browsingContext.getTree returned no top-level contexts".to_string(),
+            stacktrace: None,
+        })
+    }
+
+    /// Convenience: ids of every top-level browsing context.
+    ///
+    /// Wraps `getTree` and returns each `tree.contexts[*].context`.
+    pub async fn top_levels(&self) -> Result<Vec<BrowsingContextId>, BidiError> {
+        let tree = self.get_tree(None).await?;
+        Ok(tree.contexts.into_iter().map(|c| c.context).collect())
     }
 
     /// `browsingContext.navigate`.

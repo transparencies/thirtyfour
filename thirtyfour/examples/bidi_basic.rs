@@ -7,7 +7,7 @@
 //! commands and one event subscription.
 
 use futures_util::StreamExt;
-use thirtyfour::bidi::modules::browsing_context::events::Load;
+use thirtyfour::bidi::events::Load;
 use thirtyfour::prelude::*;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -26,12 +26,11 @@ async fn main() -> WebDriverResult<()> {
     println!("driver ready: {} ({})", status.ready, status.message);
 
     // Pick the active browsing context.
-    let tree = bidi.browsing_context().get_tree(None).await?;
-    let context = tree.contexts[0].context.clone();
+    let context = bidi.browsing_context().top_level().await?;
 
-    // Subscribe to load events, then navigate.
-    bidi.session().subscribe("browsingContext.load").await?;
-    let mut load_events = bidi.subscribe::<Load>();
+    // Subscribe to load events. Auto-sends `session.subscribe` on first call;
+    // unsubscribed automatically when `load_events` drops.
+    let mut load_events = bidi.subscribe::<Load>().await?;
 
     let url = "data:text/html,<html><title>BiDi%20demo</title></html>";
     bidi.browsing_context().navigate(context.clone(), url, None).await?;

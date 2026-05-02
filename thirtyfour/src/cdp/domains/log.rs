@@ -104,6 +104,7 @@ pub struct EntryAdded {
 }
 impl CdpEvent for EntryAdded {
     const METHOD: &'static str = "Log.entryAdded";
+    const ENABLE: Option<&'static str> = Some("Log.enable");
 }
 
 /// Domain facade returned by [`Cdp::log`].
