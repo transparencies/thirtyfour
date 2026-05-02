@@ -1,4 +1,0 @@
-#!/bin/bash
-# Chrome and chromedriver are pre-installed on GitHub-hosted Ubuntu runners.
-# CHROMEWEBDRIVER points at the directory holding the version-matched binary.
-"$CHROMEWEBDRIVER/chromedriver" --port=9515 &

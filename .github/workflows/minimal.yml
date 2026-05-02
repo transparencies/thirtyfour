@@ -16,10 +16,9 @@ jobs:
           profile: minimal
           toolchain: stable
       - uses: actions/checkout@v2
-      - name: Install browsers
-        run: |
-          ./ci/ubuntu-latest-firefox
-          ./ci/ubuntu-latest-chrome
+      # No driver install step: tests use `WebDriver::managed`, which downloads
+      # and lifetime-manages chromedriver / geckodriver itself. The browsers
+      # themselves are pre-installed on GitHub-hosted runners.
       - name: cargo update -Zminimal-versions
         uses: actions-rs/cargo@v1
         with:

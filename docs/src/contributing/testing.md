@@ -3,29 +3,41 @@
 > You only need to run the tests if you plan on contributing to the development of `thirtyfour`.
 > If you just want to use the crate in your own project, you can skip this section.
 
-Make sure selenium is not still running (or anything else that might use port 4444 or port 9515).
+The integration tests use [`WebDriver::managed`](../features/manager.md), so they
+auto-download and lifetime-manage their own `chromedriver` / `geckodriver`.
+You only need a local browser install — Chrome by default.
 
-To run the tests, you need to have an instance of `geckodriver` and an instance of `chromedriver` running in the background, perhaps in separate tabs in your terminal.
+```bash
+cargo test
+```
 
-Download links for these are here:
+The first run downloads the matching driver into your system cache
+(`~/.cache/thirtyfour/drivers` on Linux, `~/Library/Caches/thirtyfour/drivers`
+on macOS); subsequent runs reuse it. Within each test binary, sibling tests
+share a single `chromedriver` subprocess via a static `WebDriverManager`
+plus an "anchor" session, so launching is a one-time cost per binary.
 
-* chromedriver: https://chromedriver.chromium.org/downloads
-* geckodriver: https://github.com/mozilla/geckodriver/releases
+To run against Firefox instead, set `THIRTYFOUR_BROWSER`:
 
-In separate terminal tabs, run the following:
+```bash
+THIRTYFOUR_BROWSER=firefox cargo test
+```
 
-* Tab 1:
+## Manager-gated test suites
 
-      chromedriver
+A few test files are gated behind the `manager-tests` cargo feature because
+they exercise the manager subsystem itself or run the heavier CDP suites:
 
-* Tab 2:
+```bash
+# manager lifecycle smokes (Chrome, Firefox, Edge, Safari)
+cargo test -p thirtyfour --features manager-tests --test managed -- --test-threads=1
 
-      geckodriver
+# typed CDP commands
+cargo test -p thirtyfour --features manager-tests --test cdp_typed -- --test-threads=1
 
-* Tab 3 (navigate to the root of this repository):
+# CDP event subscription (also needs cdp-events)
+cargo test -p thirtyfour --features manager-tests,cdp-events --test cdp_events -- --test-threads=1
 
-      cargo test
-
-  **NOTE:** By default the tests will run in chrome only. If you want to run in firefox, do:
-      
-      THIRTYFOUR_BROWSER=firefox cargo test
+# ElementQuery filter predicates
+cargo test -p thirtyfour --features manager-tests --test query_filters -- --test-threads=1
+```

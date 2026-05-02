@@ -22,6 +22,10 @@ use thirtyfour::cdp::CdpSession;
 use thirtyfour::cdp::domains::{fetch, log, network, page, runtime, target};
 use thirtyfour::prelude::*;
 
+use crate::common::launch_managed_chrome;
+
+mod common;
+
 const TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const EVENT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -48,7 +52,7 @@ fn chrome_caps() -> ChromeCapabilities {
 /// Open a CdpSession against a managed driver. Returns both so the caller
 /// keeps the driver alive (`CdpSession` doesn't pin the WebDriver).
 async fn open_session() -> WebDriverResult<(WebDriver, CdpSession)> {
-    let driver = WebDriver::managed(chrome_caps()).await?;
+    let driver = launch_managed_chrome(chrome_caps()).await?;
     let session = driver.cdp().connect().await?;
     Ok((driver, session))
 }

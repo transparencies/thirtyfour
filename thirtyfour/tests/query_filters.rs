@@ -14,6 +14,10 @@ use std::time::Duration;
 use thirtyfour::ChromeCapabilities;
 use thirtyfour::prelude::*;
 
+use crate::common::launch_managed_chrome;
+
+mod common;
+
 const TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
 fn chrome_caps() -> ChromeCapabilities {
@@ -32,7 +36,7 @@ fn chrome_caps() -> ChromeCapabilities {
 #[tokio::test(flavor = "multi_thread")]
 async fn with_class_matches_one_class_in_multi_class_attribute() -> WebDriverResult<()> {
     tokio::time::timeout(TEST_TIMEOUT, async {
-        let driver = WebDriver::managed(chrome_caps()).await?;
+        let driver = launch_managed_chrome(chrome_caps()).await?;
 
         // Two `<li>`s share a generic class list; only the second carries the
         // class we filter on. Mirrors the markup from the original bug report.
@@ -76,7 +80,7 @@ async fn with_class_matches_one_class_in_multi_class_attribute() -> WebDriverRes
 #[tokio::test(flavor = "multi_thread")]
 async fn with_class_does_not_match_class_substring() -> WebDriverResult<()> {
     tokio::time::timeout(TEST_TIMEOUT, async {
-        let driver = WebDriver::managed(chrome_caps()).await?;
+        let driver = launch_managed_chrome(chrome_caps()).await?;
 
         driver
             .goto(
@@ -106,7 +110,7 @@ async fn with_class_does_not_match_class_substring() -> WebDriverResult<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn without_class_excludes_only_whole_token_match() -> WebDriverResult<()> {
     tokio::time::timeout(TEST_TIMEOUT, async {
-        let driver = WebDriver::managed(chrome_caps()).await?;
+        let driver = launch_managed_chrome(chrome_caps()).await?;
 
         driver
             .goto(

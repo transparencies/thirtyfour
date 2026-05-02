@@ -7,8 +7,10 @@ use std::{
 };
 
 use rstest::fixture;
+use thirtyfour::manager::WebDriverManager;
 use thirtyfour::prelude::*;
 use thirtyfour::support::block_on;
+use thirtyfour::{ChromeCapabilities, FirefoxCapabilities};
 use tokio::sync::{Semaphore, SemaphorePermit};
 
 static SERVER: OnceLock<Arc<JoinHandle<()>>> = OnceLock::new();
@@ -17,34 +19,22 @@ static LOGINIT: OnceLock<()> = OnceLock::new();
 const ASSETS_DIR: &str = "tests/test_html";
 const PORT: u16 = 8081;
 
-/// Create the Capabilities struct for the specified browser.
-pub fn make_capabilities(s: &str) -> Capabilities {
-    match s {
-        "firefox" => {
-            let mut caps = DesiredCapabilities::firefox();
-            caps.set_headless().unwrap();
-            caps.into()
-        }
-        "chrome" => {
-            let mut caps = DesiredCapabilities::chrome();
-            caps.set_headless().unwrap();
-            caps.set_no_sandbox().unwrap();
-            caps.set_disable_gpu().unwrap();
-            caps.set_disable_dev_shm_usage().unwrap();
-            caps.add_arg("--no-sandbox").unwrap();
-            caps.into()
-        }
-        browser => unimplemented!("unsupported browser backend {}", browser),
-    }
+/// Build the typed Chrome capabilities used by the integration tests.
+fn make_chrome_caps() -> ChromeCapabilities {
+    let mut caps = DesiredCapabilities::chrome();
+    caps.set_headless().unwrap();
+    caps.set_no_sandbox().unwrap();
+    caps.set_disable_gpu().unwrap();
+    caps.set_disable_dev_shm_usage().unwrap();
+    caps.add_arg("--no-sandbox").unwrap();
+    caps
 }
 
-/// Get the WebDriver URL for the specified browser.
-pub fn webdriver_url(s: &str) -> String {
-    match s {
-        "firefox" => "http://localhost:4444".to_string(),
-        "chrome" => "http://localhost:9515".to_string(),
-        browser => unimplemented!("unsupported browser backend {}", browser),
-    }
+/// Build the typed Firefox capabilities used by the integration tests.
+fn make_firefox_caps() -> FirefoxCapabilities {
+    let mut caps = DesiredCapabilities::firefox();
+    caps.set_headless().unwrap();
+    caps
 }
 
 /// Starts the web server.
@@ -96,12 +86,49 @@ pub async fn lock_firefox(browser: &str) -> Option<SemaphorePermit<'static>> {
     }
 }
 
-/// Launch the specified browser.
+/// Per-binary, per-browser `Arc<WebDriverManager>`. Sharing one builder is
+/// cheap and keeps the binary's launches funnelling through a single
+/// dedup map — useful if tests ever overlap.
+///
+/// Note: with `--test-threads=1` the dedup map's `Weak` always fails to
+/// upgrade between tests (the previous test's `Arc` is gone before the
+/// next launches), so chromedriver is respawned per test. We tried
+/// pinning a long-lived "anchor" session in a static `OnceCell` to keep
+/// the `Arc` alive, but the anchor's tokio-bound resources (HTTP pool,
+/// driver stdio readers) end up tied to the *first* test's runtime, and
+/// when that runtime drops at end-of-test the anchor goes stale. On
+/// Windows that wedges chromedriver hard enough to hang the next test.
+/// The cross-binary download cache (default `cache_dir`) is the
+/// remaining win.
+fn manager_for(browser: &str) -> &'static Arc<WebDriverManager> {
+    static CHROME: OnceLock<Arc<WebDriverManager>> = OnceLock::new();
+    static FIREFOX: OnceLock<Arc<WebDriverManager>> = OnceLock::new();
+    let cell = match browser {
+        "chrome" => &CHROME,
+        "firefox" => &FIREFOX,
+        b => unimplemented!("unsupported browser backend {b}"),
+    };
+    cell.get_or_init(|| WebDriverManager::builder().build())
+}
+
+/// Launch the specified browser via the shared per-binary [`WebDriverManager`].
 pub async fn launch_browser(browser: &str) -> WebDriver {
     tracing::debug!("launching browser {browser}");
-    let caps = make_capabilities(browser);
-    let webdriver_url = webdriver_url(browser);
-    WebDriver::new(webdriver_url, caps).await.expect("Failed to create WebDriver")
+    let mgr = manager_for(browser);
+    match browser {
+        "chrome" => mgr.launch(make_chrome_caps()).await.expect("Failed to launch chrome"),
+        "firefox" => mgr.launch(make_firefox_caps()).await.expect("Failed to launch firefox"),
+        b => unimplemented!("unsupported browser backend {b}"),
+    }
+}
+
+/// Launch a Chrome session against the binary's shared [`WebDriverManager`].
+/// Used from test files that don't go through [`TestHarness`] — the managed
+/// CDP and `ElementQuery` integration tests — so all sibling tests funnel
+/// through one manager instead of constructing a fresh one each call.
+pub async fn launch_managed_chrome(caps: ChromeCapabilities) -> WebDriverResult<WebDriver> {
+    let mgr = manager_for("chrome");
+    mgr.launch(caps).await
 }
 
 /// Helper struct for running tests.
