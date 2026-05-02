@@ -1263,13 +1263,26 @@ impl Drop for SessionHandle {
         // We also rebuild the HttpClient because the IO drivers from the original
         // runtime may already be gone.
         let _ = std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build cleanup runtime");
+            let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+                Ok(rt) => rt,
+                Err(err) => {
+                    tracing::warn!(
+                        %err,
+                        "failed to build cleanup runtime; WebDriver session may leak \
+                         until the driver times it out"
+                    );
+                    return;
+                }
+            };
             rt.block_on(async move {
                 this.client = this.client.new().await;
-                let _ = this.quit().await;
+                if let Err(err) = this.quit().await {
+                    tracing::warn!(
+                        %err,
+                        "WebDriver sync-Drop cleanup failed; the session may leak \
+                         until the driver times it out"
+                    );
+                }
             });
         })
         .join();
