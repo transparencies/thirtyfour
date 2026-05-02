@@ -40,6 +40,9 @@
 //!   [`WebElement::cdp_backend_node_id`].
 //! * `cdp-events`: WebSocket-backed CDP event subscription. Enables
 //!   [`cdp::CdpSession`] and pulls in `tokio-tungstenite`. Off by default.
+//! * `bidi`: WebDriver BiDi (W3C bidirectional protocol) — typed commands
+//!   and event subscription via [`WebDriver::bidi`]. Pulls in
+//!   `tokio-tungstenite`. Off by default.
 //!
 //! ## Example
 //!
@@ -199,6 +202,11 @@ pub mod prelude {
 pub mod action_chain;
 /// Alert handling.
 pub mod alert;
+/// WebDriver BiDi (W3C bidirectional protocol) support — typed commands and
+/// event subscription over a WebSocket. Negotiated via the `webSocketUrl`
+/// capability. See [`bidi`] for the API.
+#[cfg(feature = "bidi")]
+pub mod bidi;
 /// Chrome DevTools Protocol (CDP) support — typed commands, optional event
 /// subscription via WebSocket. See [`cdp`] for the API.
 #[cfg(feature = "cdp")]

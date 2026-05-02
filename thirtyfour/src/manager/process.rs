@@ -182,6 +182,18 @@ async fn spawn_at_port(
         cmd.arg(format!("--allowed-ips={}", cfg.host));
     }
 
+    // geckodriver's WebDriver-BiDi WebSocket binds Firefox's RemoteAgent
+    // server to a fixed default port (9222). When the manager runs many
+    // Firefox sessions back-to-back the new Firefox can't bind 9222 if the
+    // previous Firefox hasn't fully released it yet — and the resulting
+    // `webSocketUrl` capability still reports 9222, so connecting fails
+    // with HTTP 404. Pass `--websocket-port=0` to ask geckodriver to pick a
+    // free port; it propagates through to RemoteAgent and the returned
+    // `webSocketUrl` reflects the actual bound port.
+    if matches!(browser, BrowserKind::Firefox) {
+        cmd.arg("--websocket-port=0");
+    }
+
     let mut child = cmd
         .spawn()
         .map_err(|e| ManagerError::Spawn(format!("spawn {}: {}", binary.display(), e)))?;

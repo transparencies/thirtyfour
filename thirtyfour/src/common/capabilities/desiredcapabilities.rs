@@ -109,6 +109,9 @@ const W3C_CAPABILITY_NAMES: &[&str] = &[
     "timeouts",
     "unhandledPromptBehavior",
     "strictFileInteractability",
+    // W3C WebDriver BiDi — set to `true` to opt in; the response capabilities
+    // come back with the actual `ws://...` URL string.
+    "webSocketUrl",
 ];
 
 const OSS_W3C_CONVERSION: &[(&str, &str)] = &[
@@ -309,6 +312,14 @@ pub trait CapabilitiesHelper: AsRef<Capabilities> + AsMut<Capabilities> {
     /// Set the page load strategy to use.
     fn set_page_load_strategy(&mut self, strategy: PageLoadStrategy) -> WebDriverResult<()> {
         self.set("pageLoadStrategy", strategy)
+    }
+
+    /// Opt the session in to WebDriver BiDi by setting the W3C
+    /// `webSocketUrl: true` capability. The driver responds with the actual
+    /// `ws://...` URL on the session capabilities; reach the BiDi handle via
+    /// [`crate::WebDriver::bidi`] (feature `bidi`).
+    fn enable_bidi(&mut self) -> WebDriverResult<()> {
+        self.set("webSocketUrl", true)
     }
 }
 

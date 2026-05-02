@@ -32,6 +32,10 @@ cdp = []
 # `Cdp::connect()` and `CdpSession`. Off by default; pulls in
 # `tokio-tungstenite`.
 cdp-events = ["cdp", "dep:tokio-tungstenite", "tokio/macros", "tokio/rt"]
+# WebDriver BiDi (W3C) — typed commands and event subscription over a
+# WebSocket negotiated via the `webSocketUrl: true` capability. Off by
+# default. Pulls in `tokio-tungstenite`. See `WebDriver::bidi`.
+bidi = ["dep:tokio-tungstenite", "tokio/macros", "tokio/rt"]
 # Auto-download and lifetime-manage local chromedriver / geckodriver processes.
 # Pulls in archive-extraction and cache-dir deps. See `thirtyfour::manager`.
 manager = [
@@ -138,6 +142,18 @@ required-features = ["manager"]
 [[example]]
 name = "chrome_devtools"
 required-features = ["manager", "cdp"]
+
+[[example]]
+name = "bidi_basic"
+required-features = ["manager", "bidi"]
+
+[[example]]
+name = "bidi_network_intercept"
+required-features = ["manager", "bidi"]
+
+[[example]]
+name = "bidi_log_events"
+required-features = ["manager", "bidi"]
 
 [[example]]
 name = "chrome_options"

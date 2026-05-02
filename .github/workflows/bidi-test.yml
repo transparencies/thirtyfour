@@ -1,0 +1,59 @@
+on:
+  push:
+    branches: [main]
+    # BiDi tests download a real driver and exercise the typed + event WS
+    # layers. Trigger on changes to anything that could affect them.
+    paths:
+      - 'thirtyfour/src/bidi/**'
+      - 'thirtyfour/tests/bidi_typed.rs'
+      - 'thirtyfour/tests/bidi_events.rs'
+      - 'thirtyfour/tests/common.rs'
+      - 'thirtyfour/src/web_driver.rs'
+      - 'thirtyfour/src/web_element.rs'
+      - 'thirtyfour/src/session/**'
+      - 'thirtyfour/src/manager/**'
+      - 'thirtyfour/src/common/capabilities/**'
+      - 'thirtyfour/Cargo.toml'
+      - '.github/workflows/bidi-test.yml'
+  pull_request:
+    paths:
+      - 'thirtyfour/src/bidi/**'
+      - 'thirtyfour/tests/bidi_typed.rs'
+      - 'thirtyfour/tests/bidi_events.rs'
+      - 'thirtyfour/tests/common.rs'
+      - 'thirtyfour/src/web_driver.rs'
+      - 'thirtyfour/src/web_element.rs'
+      - 'thirtyfour/src/session/**'
+      - 'thirtyfour/src/manager/**'
+      - 'thirtyfour/src/common/capabilities/**'
+      - 'thirtyfour/Cargo.toml'
+      - '.github/workflows/bidi-test.yml'
+name: cargo test (bidi)
+jobs:
+  # WebDriver BiDi is a W3C cross-browser protocol — run the suite against
+  # both chromedriver and geckodriver to keep the typed bindings honest.
+  # Ubuntu only: the WS connect path is OS-agnostic so per-OS coverage
+  # would just add CI time; the existing `cdp-test.yml` already covers
+  # OS-specific shape on the Chromium side.
+  bidi:
+    runs-on: ubuntu-latest
+    name: bidi ${{ matrix.suite }} / ${{ matrix.browser }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
+        suite: [typed, events]
+    env:
+      THIRTYFOUR_BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - uses: actions/checkout@v2
+      - name: cargo test (bidi_${{ matrix.suite }})
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p thirtyfour --features manager-tests,bidi --test bidi_${{ matrix.suite }} -- --test-threads=1

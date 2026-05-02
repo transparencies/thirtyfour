@@ -131,6 +131,46 @@ pub async fn launch_managed_chrome(caps: ChromeCapabilities) -> WebDriverResult<
     mgr.launch(caps).await
 }
 
+/// Launch a Firefox session against the binary's shared [`WebDriverManager`].
+/// Mirror of [`launch_managed_chrome`] for cross-browser tests
+/// (notably the BiDi suite, which is supported by both browsers).
+pub async fn launch_managed_firefox(caps: FirefoxCapabilities) -> WebDriverResult<WebDriver> {
+    let mgr = manager_for("firefox");
+    mgr.launch(caps).await
+}
+
+/// Launch a BiDi-enabled session for the browser named by the
+/// `THIRTYFOUR_BROWSER` env var (`"chrome"` | `"firefox"`, default Chrome).
+///
+/// Used by the BiDi integration test suites — BiDi is a W3C cross-browser
+/// protocol so the tests run on both via the env var.
+pub async fn launch_managed_bidi() -> WebDriverResult<WebDriver> {
+    let browser = std::env::var("THIRTYFOUR_BROWSER").unwrap_or_else(|_| "chrome".to_string());
+    match browser.as_str() {
+        "firefox" => {
+            let mut caps = DesiredCapabilities::firefox();
+            caps.set_headless()?;
+            caps.enable_bidi()?;
+            launch_managed_firefox(caps).await
+        }
+        _ => {
+            let mut caps = DesiredCapabilities::chrome();
+            caps.set_headless()?;
+            caps.set_no_sandbox()?;
+            caps.set_disable_gpu()?;
+            caps.set_disable_dev_shm_usage()?;
+            caps.add_arg("--no-sandbox")?;
+            caps.enable_bidi()?;
+            launch_managed_chrome(caps).await
+        }
+    }
+}
+
+/// Returns the active browser backend name for BiDi tests.
+pub fn bidi_browser() -> String {
+    std::env::var("THIRTYFOUR_BROWSER").unwrap_or_else(|_| "chrome".to_string())
+}
+
 /// Helper struct for running tests.
 pub struct TestHarness {
     browser: String,

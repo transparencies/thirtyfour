@@ -23,6 +23,7 @@ Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI 
 - Alert support
 - Capture / Save screenshot of browser or individual element as PNG
 - Chrome DevTools Protocol (CDP) — typed commands plus optional WebSocket-based event subscription via the `cdp-events` feature
+- WebDriver BiDi (W3C bidirectional protocol) — typed commands and event subscription cross-browser, opt-in via the `bidi` feature
 - Powerful query interface (the recommended way to find elements) with explicit waits and various predicates
 - Component Wrappers (similar to `Page Object Model`)
 
@@ -31,6 +32,11 @@ Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI 
 - `rustls-tls`: (Default) Use rustls to provide TLS support (via reqwest).
 - `native-tls`: Use native TLS (via reqwest).
 - `component`: (Default) Enable the `Component` derive macro (via thirtyfour_macros).
+- `cdp`: (Default) Typed Chrome DevTools Protocol commands.
+- `cdp-events`: WebSocket-backed CDP event subscription.
+- `bidi`: WebDriver BiDi (W3C) — typed commands and event subscription
+  via `WebDriver::bidi()`. Opt in by calling `caps.enable_bidi()` before
+  starting the session.
 
 ### Example (async):
 
