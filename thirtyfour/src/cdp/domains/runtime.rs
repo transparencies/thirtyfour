@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, CdpEvent, Empty};
 use crate::cdp::ids::{ExecutionContextId, RemoteObjectId, ScriptId};
-use crate::cdp::macros::string_enum;
+use crate::common::protocol::string_enum;
 use crate::error::WebDriverResult;
 
 /// `Runtime.enable`.

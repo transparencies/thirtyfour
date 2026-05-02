@@ -14,6 +14,8 @@ pub mod keys;
 pub mod log;
 /// Types used with print commands.
 pub mod print;
+#[cfg(any(feature = "cdp", feature = "bidi"))]
+pub(crate) mod protocol;
 /// Type for request method and body.
 pub mod requestdata;
 /// Common types used within thirtyfour.

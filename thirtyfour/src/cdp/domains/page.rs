@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, CdpEvent, Empty};
 use crate::cdp::ids::{FrameId, LoaderId, ScriptId};
-use crate::cdp::macros::string_enum;
+use crate::common::protocol::string_enum;
 use crate::error::WebDriverResult;
 
 string_enum! {

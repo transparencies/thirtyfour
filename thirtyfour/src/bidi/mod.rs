@@ -56,7 +56,6 @@ mod error;
 mod events;
 mod handle;
 mod ids;
-mod macros;
 mod transport;
 
 pub use command::{BidiCommand, BidiEvent, Empty, RawEvent};

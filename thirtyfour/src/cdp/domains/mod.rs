@@ -20,8 +20,8 @@
 //!    acronyms (`documentURL`, `baseURL`, etc.) on a number of fields —
 //!    these need explicit `#[serde(rename = "...")]`.
 //! 2. **For closed string sets, use the internal `string_enum!` macro**
-//!    (in `cdp/macros.rs`) rather than raw `String` fields. The macro
-//!    generates a forward-compat `Unknown(String)` variant.
+//!    (in `common/protocol.rs`) rather than raw `String` fields. The
+//!    macro generates a forward-compat `Unknown(String)` variant.
 //! 3. **Use [`crate::cdp::Empty`] for commands that return `{}`.** A bare
 //!    `()` does NOT deserialise from `{}`.
 //! 4. **For optional params, use `Option<T>` with

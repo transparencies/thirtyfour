@@ -51,9 +51,9 @@ pub trait CdpEvent: DeserializeOwned + Clone + Send + Sync + 'static {
 
 /// Marker type for CDP commands whose response body is `{}`.
 ///
-/// Many commands (`Network.enable`, `Page.reload`, `Emulation.clearDeviceMetricsOverride`,
-/// etc.) return an empty object on success. Use this as the [`CdpCommand::Returns`]
-/// type for those.
+/// Many commands (`Network.enable`, `Page.reload`,
+/// `Emulation.clearDeviceMetricsOverride`, etc.) return an empty object
+/// on success. Use this as the [`CdpCommand::Returns`] type for those.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Empty {}
