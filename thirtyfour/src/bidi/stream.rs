@@ -1,11 +1,21 @@
 //! Event subscription primitives for [`crate::bidi::BiDi`].
 //!
-//! A subscription is a `Stream<Item = E>` filtered to one event method
-//! name. Backed by a `tokio::sync::broadcast` channel that fans out from
-//! the WebSocket reader task to every active subscriber. The stream
-//! holds a refcounted handle into [`crate::bidi::BiDi`]'s subscription
-//! tracking — when the last stream for a given method drops, the wire-level
-//! `session.unsubscribe` is sent automatically.
+//! A subscription is a [`futures::Stream`](futures_util::Stream)
+//! `Item = E` filtered to one event method name. Internally,
+//! [`EventStream`] is a wrapper over a
+//! [`tokio::sync::broadcast::Receiver`] that fans out from the
+//! WebSocket reader task to every active subscriber.
+//!
+//! Each [`EventStream`] also holds a per-method handle into the
+//! transport's subscription refcount: when the last stream for a given
+//! method drops, the wire-level
+//! [`session.unsubscribe`](crate::bidi::modules::session::Unsubscribe)
+//! is sent automatically (best-effort; spawned on the current tokio
+//! runtime).
+//!
+//! Use [`RawEventStream`] (returned by
+//! [`BiDi::subscribe_raw`](crate::bidi::BiDi::subscribe_raw)) for an
+//! untyped firehose with no filtering or deserialisation.
 
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -20,15 +30,28 @@ use super::transport::ws::BidiTransport;
 
 /// A typed BiDi event stream.
 ///
-/// Constructed via [`crate::bidi::BiDi::subscribe`]. Internally a wrapper
-/// over a `tokio::sync::broadcast::Receiver` that filters by event method
-/// name, then deserialises params into `T`.
+/// Constructed via [`BiDi::subscribe`](crate::bidi::BiDi::subscribe).
+/// The stream yields events whose method name matches `T::METHOD`
+/// (filtering happens locally; subscriptions are still made
+/// per-method on the wire).
 ///
-/// Items where the wire shape can't be deserialised as `T` are skipped
-/// with a `tracing::warn!` — they shouldn't happen unless a vendor-specific
-/// event method name collides or the wire shape has changed upstream, in
-/// which case the user should switch to [`crate::bidi::BiDi::subscribe_raw`]
-/// and parse manually.
+/// # Deserialisation failures
+///
+/// Items whose wire shape can't be deserialised as `T` are skipped
+/// with a `tracing::warn!` to the `thirtyfour::bidi` target. This
+/// shouldn't happen during normal operation — it usually indicates a
+/// driver-vendor extension or a wire-shape change in a newer spec
+/// revision. When it does, switch to
+/// [`BiDi::subscribe_raw`](crate::bidi::BiDi::subscribe_raw) and parse
+/// manually.
+///
+/// # Drop behaviour
+///
+/// Dropping the stream releases its per-method subscription refcount.
+/// When the last [`EventStream`] for `T::METHOD` drops, the framework
+/// spawns a background `session.unsubscribe` on the current tokio
+/// runtime; if no runtime is current, the unsubscribe is skipped (the
+/// subscription will be cleaned up when the BiDi handle drops).
 #[derive(Debug)]
 pub struct EventStream<T> {
     transport: BidiTransport,
@@ -138,8 +161,21 @@ fn warn_parse_failure<T>(method: &str, raw: &RawEvent, err: &serde_json::Error) 
     );
 }
 
-/// All-events stream returned by [`crate::bidi::BiDi::subscribe_raw`].
-/// Yields raw `RawEvent`s without method or shape filtering.
+/// All-events stream returned by
+/// [`BiDi::subscribe_raw`](crate::bidi::BiDi::subscribe_raw).
+///
+/// Yields every event the driver pushes, without filtering by method
+/// or deserialising params. The caller is responsible for sending the
+/// matching [`session.subscribe`](crate::bidi::modules::session::Subscribe)
+/// to start the flow.
+///
+/// Use this when:
+/// - You're debugging an unknown event shape and want to see every
+///   incoming envelope.
+/// - You want a single firehose for many event types without the cost
+///   of per-type subscriptions.
+/// - The event isn't (yet) modelled as a typed [`BidiEvent`] and you'd
+///   prefer raw access over implementing one.
 #[derive(Debug)]
 pub struct RawEventStream {
     rx: Receiver<RawEvent>,

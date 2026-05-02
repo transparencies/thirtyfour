@@ -12,12 +12,12 @@ typed commands grouped by module (`browsingContext.*`, `script.*`,
 `network.*`, …), event subscriptions, request interception. The
 trade-off is coverage vs. portability:
 
-|                       | CDP (Chromium-only) | BiDi (cross-browser) |
-|-----------------------|---------------------|-----------------------|
-| Surface area          | Larger              | Growing, but smaller |
-| Portable across browsers | No               | Yes                   |
-| Standardised          | No                  | Yes (W3C)             |
-| Connection            | Direct WebSocket    | Via WebDriver session |
+|                       | CDP (Chromium-only)        | BiDi (cross-browser)       |
+|-----------------------|----------------------------|----------------------------|
+| Surface area          | Larger, Chromium-specific  | Full W3C BiDi spec covered |
+| Portable across browsers | No                      | Yes                        |
+| Standardised          | No                         | Yes (W3C)                  |
+| Connection            | Direct WebSocket           | Via WebDriver session      |
 
 ## Enabling BiDi
 
@@ -81,14 +81,16 @@ The curated typed bindings live under [`bidi::modules`][modules-rustdoc]:
 | Module             | Use it for                                                                |
 |--------------------|---------------------------------------------------------------------------|
 | `session`          | `status`, `subscribe`/`unsubscribe`, `end`                                |
-| `browser`          | Top-level browser control, user contexts                                  |
-| `browsing_context` | Tabs, frames, navigation, screenshots, history                            |
+| `browser`          | Browser-wide control, user contexts, client windows, download behavior    |
+| `browsing_context` | Tabs, frames, navigation, screenshots, printing, locating nodes, CSP      |
 | `script`           | `evaluate`, `callFunction`, preload scripts, realms                       |
-| `network`          | Interception, modify request/response, auth                               |
+| `network`          | Interception, modify request/response, auth, data collectors, headers     |
 | `storage`          | Cookies and partition lookup                                              |
 | `log`              | `log.entryAdded` events                                                   |
-| `input`            | `performActions`, `releaseActions`, `setFiles`                            |
+| `input`            | `performActions`, `releaseActions`, `setFiles`, `fileDialogOpened` events |
 | `permissions`      | `setPermission`                                                           |
+| `emulation`        | Geolocation, locale, timezone, screen, user-agent, scripting & touch      |
+| `web_extension`    | Install / uninstall web extensions                                        |
 
 Each command in those modules is a Rust struct that implements
 [`BidiCommand`], pairing the request type with its response type and
@@ -107,6 +109,40 @@ A few helpers worth knowing about:
   [`InterceptGuard`][intercept-guard-rustdoc] you can `.remove().await`
   explicitly, or just let drop (best-effort cleanup runs in the
   background).
+
+## Emulation Overrides
+
+The `emulation` module overrides browser-emulated APIs (geolocation,
+locale, timezone, screen, user agent, scripting, touch, …). Each
+command applies globally by default; build the command struct directly
+to scope it to specific browsing contexts or user contexts. Pass `None`
+to clear an override.
+
+```rust
+use thirtyfour::bidi::modules::emulation::GeolocationCoordinates;
+# use thirtyfour::prelude::*;
+# async fn run(bidi: thirtyfour::bidi::BiDi) -> WebDriverResult<()> {
+bidi.emulation()
+    .set_geolocation_override(Some(GeolocationCoordinates {
+        latitude: -33.8688,
+        longitude: 151.2093,
+        accuracy: Some(50.0),
+        altitude: None,
+        altitude_accuracy: None,
+        heading: None,
+        speed: None,
+    }))
+    .await?;
+
+bidi.emulation().set_timezone_override(Some("Australia/Sydney".into())).await?;
+bidi.emulation().set_locale_override(Some("en-AU".into())).await?;
+# Ok(()) }
+```
+
+> Driver support for `emulation.*` is uneven at the time of writing —
+> chromedriver implements most, geckodriver lags. The wire shape is
+> stable; commands return `error("unsupported operation")` where the
+> driver doesn't yet handle them.
 
 ## The Untyped Escape Hatch
 

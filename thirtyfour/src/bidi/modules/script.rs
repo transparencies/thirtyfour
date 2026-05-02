@@ -1,9 +1,40 @@
-//! `script.*` BiDi module — `evaluate`, `callFunction`, preload scripts, realms.
+//! `script.*` — execute JavaScript, manage preload scripts, observe realms.
 //!
-//! Remote-object trees in BiDi (`RemoteValue`) are deeply recursive and
-//! mostly used as opaque round-trip data: this module exposes them as
-//! [`serde_json::Value`] so users don't pay an upfront serde cost, and can
-//! deserialize themselves if/when they want to.
+//! BiDi's script module is the bidirectional successor to WebDriver
+//! Classic's `Execute Script` endpoint. It can:
+//!
+//! - Run an expression ([`Evaluate`][ev]) or call a function with
+//!   arguments ([`CallFunction`][cf]) in any [`script.Realm`][realm-spec].
+//! - Install preload scripts ([`AddPreloadScript`][aps]) that run at
+//!   document-start of every navigation, including in iframes.
+//! - Enumerate realms ([`GetRealms`][gr]) and observe their lifecycle
+//!   ([`RealmCreated`][rc], [`RealmDestroyed`][rd]).
+//! - Receive messages from preload-script channels ([`Message`][msg]).
+//! - Release retained references to remote objects ([`Disown`][dis]).
+//!
+//! The spec models JavaScript values as a deeply-recursive
+//! [`script.RemoteValue`][remotevalue-spec] tree. To keep the Rust API
+//! ergonomic this module exposes those values as [`serde_json::Value`]
+//! — round-trip them as-is, or destructure with serde when you need
+//! them strongly typed. Arguments to [`CallFunction`][cf] follow the
+//! sibling [`script.LocalValue`][localvalue-spec] shape.
+//!
+//! [ev]: crate::bidi::modules::script::Evaluate
+//! [cf]: crate::bidi::modules::script::CallFunction
+//! [aps]: crate::bidi::modules::script::AddPreloadScript
+//! [gr]: crate::bidi::modules::script::GetRealms
+//! [rc]: crate::bidi::modules::script::events::RealmCreated
+//! [rd]: crate::bidi::modules::script::events::RealmDestroyed
+//! [msg]: crate::bidi::modules::script::events::Message
+//! [dis]: crate::bidi::modules::script::Disown
+//!
+//! See the [W3C `script` module specification][spec] for the canonical
+//! definitions.
+//!
+//! [spec]: https://w3c.github.io/webdriver-bidi/#module-script
+//! [realm-spec]: https://w3c.github.io/webdriver-bidi/#type-script-Realm
+//! [remotevalue-spec]: https://w3c.github.io/webdriver-bidi/#type-script-RemoteValue
+//! [localvalue-spec]: https://w3c.github.io/webdriver-bidi/#type-script-LocalValue
 
 use serde::{Deserialize, Serialize};
 
@@ -14,51 +45,69 @@ use crate::bidi::ids::{BrowsingContextId, ChannelId, PreloadScriptId, RealmId};
 use crate::common::protocol::string_enum;
 
 string_enum! {
-    /// Mode controlling how `evaluate` / `callFunction` resolve return-value
-    /// references.
+    /// Result-ownership mode for [`Evaluate`] / [`CallFunction`]. Mirrors
+    /// the spec's [`script.ResultOwnership`][spec] type.
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-ResultOwnership
     pub enum ResultOwnership {
-        /// Return references owned by the calling realm; release explicitly
-        /// via `script.disown`.
+        /// Retain the returned object reference; release it later via
+        /// [`Disown`].
         Root = "root",
-        /// Drop references as soon as the response is delivered.
+        /// Drop the reference as soon as the response is delivered
+        /// (default).
         None = "none",
     }
 }
 
-/// `script.Target` — addressing a script realm.
+/// Target realm or context for [`Evaluate`] / [`CallFunction`] /
+/// [`Disown`]. Mirrors the spec's [`script.Target`][spec] union.
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-Target
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum Target {
-    /// Address by realm id (most precise; survives navigations).
+    /// Address by realm id (most precise; survives same-origin navigations).
     Realm {
         /// Realm to evaluate in.
         realm: RealmId,
     },
-    /// Address by browsing-context id; the driver picks the active realm.
+    /// Address by browsing-context id; the driver picks the active
+    /// realm. Optional `sandbox` selects a named isolated realm
+    /// instead.
     Context {
         /// Browsing context to evaluate in.
         context: BrowsingContextId,
-        /// Optional sandbox name. Each `(context, sandbox)` is its own realm.
+        /// Optional sandbox name. Each `(context, sandbox)` pair lives
+        /// in its own realm, isolated from the page's main world.
         #[serde(skip_serializing_if = "Option::is_none")]
         sandbox: Option<String>,
     },
 }
 
-/// `script.evaluate`.
+/// [`script.evaluate`][spec] — run a JavaScript expression in a realm.
+///
+/// `expression` is parsed as a JavaScript expression (NOT a script). To
+/// `await` a top-level promise, set [`await_promise`][Self::await_promise]
+/// — the wire-level `expression` then runs inside the BiDi runtime's
+/// implicit `async`.
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-evaluate
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Evaluate {
-    /// Source code to evaluate. May contain `await` if `awaitPromise: true`.
+    /// Expression source.
     pub expression: String,
     /// Realm or context to evaluate in.
     pub target: Target,
-    /// If true, await any returned promise before resolving.
+    /// If `true`, await any returned promise before resolving.
     pub await_promise: bool,
-    /// Whether the result reference should be retained.
+    /// Whether to retain the result reference. Defaults to
+    /// [`ResultOwnership::None`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result_ownership: Option<ResultOwnership>,
-    /// If true, treat the call as a user activation (allows
-    /// `Document.requestStorageAccess()`, etc.).
+    /// If `true`, treat the call as a user activation — gates APIs
+    /// like `Document.requestStorageAccess()` and pop-ups behind a
+    /// real user gesture.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_activation: Option<bool>,
 }
@@ -68,11 +117,11 @@ impl BidiCommand for Evaluate {
     type Returns = EvaluateResult;
 }
 
-/// Response for [`Evaluate`] / [`CallFunction`].
+/// Result of [`Evaluate`] / [`CallFunction`]. Mirrors the spec's
+/// [`script.EvaluateResult`][spec] union — either a successful return
+/// value or an exception.
 ///
-/// The driver returns one of two shapes — success (with `result`) or
-/// exception (with `exceptionDetails`). Modeled here as a tagged enum on
-/// `type`.
+/// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-EvaluateResult
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum EvaluateResult {
@@ -80,21 +129,27 @@ pub enum EvaluateResult {
     Success {
         /// Realm the value lives in.
         realm: RealmId,
-        /// Returned value (BiDi `RemoteValue`).
+        /// Returned value as a [`script.RemoteValue`][spec] JSON tree.
+        ///
+        /// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-RemoteValue
         result: serde_json::Value,
     },
     /// Threw an exception.
     Exception {
         /// Realm the throw happened in.
         realm: RealmId,
-        /// Exception details (BiDi `ExceptionDetails`).
+        /// Exception details — a [`script.ExceptionDetails`][spec]
+        /// JSON value.
+        ///
+        /// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-ExceptionDetails
         #[serde(rename = "exceptionDetails")]
         exception_details: serde_json::Value,
     },
 }
 
 impl EvaluateResult {
-    /// Borrow the `result` value if this is a success, else `None`.
+    /// Borrow the `result` value if this is a [`Success`][Self::Success],
+    /// else `None`.
     pub fn ok_value(&self) -> Option<&serde_json::Value> {
         match self {
             EvaluateResult::Success {
@@ -111,26 +166,47 @@ impl EvaluateResult {
     }
 }
 
-/// `script.callFunction`.
+/// [`script.callFunction`][spec] — call a JavaScript function with
+/// arguments and a `this` binding.
+///
+/// `function_declaration` is the source of a function expression:
+///
+/// ```js
+/// function (a, b) { return a + b; }
+/// // or
+/// (a, b) => a + b
+/// ```
+///
+/// Arguments are passed as [`script.LocalValue`][local] JSON values
+/// (primitive shape: `{"type":"number","value":1}`,
+/// `{"type":"string","value":"hi"}`, etc.). Use
+/// [`this`][Self::this] to set the `this` binding.
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-callFunction
+/// [local]: https://w3c.github.io/webdriver-bidi/#type-script-LocalValue
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CallFunction {
-    /// Function-source string. Receives `this` and arguments per BiDi semantics.
+    /// Function-source string (a function expression or arrow function).
     pub function_declaration: String,
-    /// If true, await any returned promise before resolving.
+    /// If `true`, await any returned promise before resolving.
     pub await_promise: bool,
     /// Realm or context to call in.
     pub target: Target,
-    /// Arguments passed to the function (BiDi `LocalValue` JSON).
+    /// Arguments — array of [`script.LocalValue`][local] JSON values.
+    ///
+    /// [local]: https://w3c.github.io/webdriver-bidi/#type-script-LocalValue
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<serde_json::Value>,
-    /// Optional `this` reference (BiDi `LocalValue` JSON).
+    /// Optional `this` reference (a [`script.LocalValue`][local]).
+    ///
+    /// [local]: https://w3c.github.io/webdriver-bidi/#type-script-LocalValue
     #[serde(skip_serializing_if = "Option::is_none")]
     pub this: Option<serde_json::Value>,
-    /// Whether the result reference should be retained.
+    /// Whether to retain the result reference.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result_ownership: Option<ResultOwnership>,
-    /// If true, treat the call as a user activation.
+    /// If `true`, treat the call as a user activation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_activation: Option<bool>,
 }
@@ -140,19 +216,30 @@ impl BidiCommand for CallFunction {
     type Returns = EvaluateResult;
 }
 
-/// `script.addPreloadScript`.
+/// [`script.addPreloadScript`][spec] — install a script that runs at
+/// document-start of every navigation in matching contexts.
+///
+/// Preload scripts run in their own (or a named-`sandbox`) isolated
+/// realm. They can take arguments — most commonly a
+/// [`script.ChannelValue`][channel] which the page can post messages
+/// through, surfacing as [`events::Message`].
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-addPreloadScript
+/// [channel]: https://w3c.github.io/webdriver-bidi/#type-script-ChannelValue
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddPreloadScript {
-    /// Function source — runs at document-start of every navigation.
+    /// Function-source string (`(channel) => { … }`).
     pub function_declaration: String,
-    /// Optional list of `LocalValue` arguments to pass.
+    /// Arguments — usually one or more channel values.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<serde_json::Value>,
-    /// Optional sandbox name (creates an isolated realm).
+    /// Optional sandbox name (creates an isolated realm shared with
+    /// `script.callFunction(target: Context { sandbox: Some(…) })`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox: Option<String>,
-    /// Restrict to specific contexts. Empty / omitted = global.
+    /// Restrict to specific top-level browsing contexts. Empty = every
+    /// context.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub contexts: Vec<BrowsingContextId>,
 }
@@ -169,7 +256,12 @@ pub struct AddPreloadScriptResult {
     pub script: PreloadScriptId,
 }
 
-/// `script.removePreloadScript`.
+/// [`script.removePreloadScript`][spec] — uninstall a preload script.
+///
+/// Already-running scripts in active realms are not affected; only
+/// future navigations stop applying it.
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-removePreloadScript
 #[derive(Debug, Clone, Serialize)]
 pub struct RemovePreloadScript {
     /// Id returned by [`AddPreloadScript`].
@@ -181,16 +273,20 @@ impl BidiCommand for RemovePreloadScript {
     type Returns = Empty;
 }
 
-/// `script.getRealms`.
+/// [`script.getRealms`][spec] — list active realms, optionally filtered.
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-getRealms
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetRealms {
     /// Restrict to a single browsing context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<BrowsingContextId>,
-    /// Restrict to a realm type. See spec for valid strings (`window`,
-    /// `dedicated-worker`, `shared-worker`, `service-worker`, `worker`,
-    /// `paint-worklet`, `audio-worklet`, `worklet`).
+    /// Restrict to a [realm type][spec]: `"window"`, `"dedicated-worker"`,
+    /// `"shared-worker"`, `"service-worker"`, `"worker"`,
+    /// `"paint-worklet"`, `"audio-worklet"`, or `"worklet"`.
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-RealmType
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
 }
@@ -203,37 +299,50 @@ impl BidiCommand for GetRealms {
 /// Response for [`GetRealms`].
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetRealmsResult {
-    /// Discovered realms.
+    /// All realms matching the filter (or every realm if unfiltered).
     pub realms: Vec<RealmInfo>,
 }
 
-/// Info for a single realm. Modeled as the spec's discriminated union over
-/// `type`; the rest of the fields vary by type, so non-essential fields are
-/// captured into [`RealmInfo::extra`].
+/// Information about a single realm. Mirrors the spec's
+/// [`script.RealmInfo`][spec] discriminated union.
+///
+/// Type-specific fields (e.g. `sandbox` for window realms, `owners` for
+/// worker realms) are flattened into [`extra`][Self::extra].
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-RealmInfo
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RealmInfo {
     /// Realm id.
     pub realm: RealmId,
-    /// Origin string.
+    /// Origin string (`"https://example.com"`, `"null"`, …).
     pub origin: String,
-    /// Realm type (`"window"`, `"worker"`, …).
+    /// Realm type (`"window"`, `"dedicated-worker"`, …).
     #[serde(rename = "type")]
     pub realm_type: String,
     /// Browsing context for window-type realms.
     #[serde(default)]
     pub context: Option<BrowsingContextId>,
-    /// Other fields (e.g. `sandbox`, `owners`) flattened into a JSON map.
+    /// Other type-specific fields.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// `script.disown` — drop references to remote objects.
+/// [`script.disown`][spec] — release retained object references.
+///
+/// Only meaningful for evaluations that used
+/// [`ResultOwnership::Root`] — without that, references are released
+/// automatically.
+///
+/// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-disown
 #[derive(Debug, Clone, Serialize)]
 pub struct Disown {
-    /// Object handles to disown.
+    /// Object handles to disown (the `handle` field on each
+    /// [`script.RemoteValue`][spec]).
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#type-script-RemoteValue
     pub handles: Vec<String>,
-    /// Realm or context to disown in.
+    /// Realm or context where the handles live.
     pub target: Target,
 }
 
@@ -250,7 +359,10 @@ impl BidiCommand for Disown {
 pub(crate) mod events {
     use super::*;
 
-    /// `script.realmCreated`.
+    /// [`script.realmCreated`][spec] — fires when a new realm becomes
+    /// available (page navigation, worker startup, …).
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#event-script-realmCreated
     #[derive(Debug, Clone, Deserialize)]
     pub struct RealmCreated(pub RealmInfo);
 
@@ -258,7 +370,9 @@ pub(crate) mod events {
         const METHOD: &'static str = "script.realmCreated";
     }
 
-    /// `script.realmDestroyed`.
+    /// [`script.realmDestroyed`][spec] — fires when a realm is torn down.
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#event-script-realmDestroyed
     #[derive(Debug, Clone, Deserialize)]
     pub struct RealmDestroyed {
         /// Realm that was destroyed.
@@ -269,15 +383,27 @@ pub(crate) mod events {
         const METHOD: &'static str = "script.realmDestroyed";
     }
 
-    /// `script.message`. Posted from preload-script-installed channels via
-    /// the function `channel(...)` argument.
+    /// [`script.message`][spec] — a preload-script channel posted a
+    /// message.
+    ///
+    /// Channels are created by passing a
+    /// [`script.ChannelValue`][channel] argument to
+    /// [`AddPreloadScript`]; the script can then post arbitrary
+    /// messages back through it.
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#event-script-message
+    /// [channel]: https://w3c.github.io/webdriver-bidi/#type-script-ChannelValue
     #[derive(Debug, Clone, Deserialize)]
     pub struct Message {
         /// Channel id the message was sent on.
         pub channel: ChannelId,
-        /// Payload (`RemoteValue`).
+        /// Payload — a [`script.RemoteValue`][rv] JSON value.
+        ///
+        /// [rv]: https://w3c.github.io/webdriver-bidi/#type-script-RemoteValue
         pub data: serde_json::Value,
-        /// Source realm.
+        /// Source realm — a [`script.Source`][src] JSON value.
+        ///
+        /// [src]: https://w3c.github.io/webdriver-bidi/#type-script-Source
         pub source: serde_json::Value,
     }
 
@@ -286,7 +412,13 @@ pub(crate) mod events {
     }
 }
 
-/// Module facade returned by [`BiDi::script`].
+/// Convenience facade for the `script.*` module.
+///
+/// Returned by [`BiDi::script`](crate::bidi::BiDi::script). The methods
+/// here cover the common forms of each command (no-argument call, no
+/// sandbox, default ownership). For sandboxed evaluation, custom
+/// arguments, retained references, or user-activation gating, build the
+/// command struct directly.
 #[derive(Debug)]
 pub struct ScriptModule<'a> {
     bidi: &'a BiDi,
@@ -299,8 +431,13 @@ impl<'a> ScriptModule<'a> {
         }
     }
 
-    /// `script.evaluate` — convenience: synchronous expression in the active
-    /// realm of `context`.
+    /// Run a JavaScript expression in `context`'s default realm via
+    /// [`script.evaluate`][spec].
+    ///
+    /// Set `await_promise` if the expression resolves to a promise you
+    /// want awaited.
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-evaluate
     pub async fn evaluate(
         &self,
         context: BrowsingContextId,
@@ -321,8 +458,13 @@ impl<'a> ScriptModule<'a> {
             .await
     }
 
-    /// `script.callFunction` — convenience: call a function declaration in
-    /// `context` with no arguments.
+    /// Call a function in `context`'s default realm with no arguments
+    /// via [`script.callFunction`][spec].
+    ///
+    /// `function_declaration` is a function expression source string —
+    /// see [`CallFunction`].
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-callFunction
     pub async fn call_function(
         &self,
         context: BrowsingContextId,
@@ -345,7 +487,13 @@ impl<'a> ScriptModule<'a> {
             .await
     }
 
-    /// `script.addPreloadScript`.
+    /// Install a global preload script via
+    /// [`script.addPreloadScript`][spec].
+    ///
+    /// For sandboxed scripts, channel arguments, or per-context scope
+    /// build an [`AddPreloadScript`] directly.
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-addPreloadScript
     pub async fn add_preload_script(
         &self,
         function_declaration: impl Into<String>,
@@ -360,7 +508,10 @@ impl<'a> ScriptModule<'a> {
             .await
     }
 
-    /// `script.removePreloadScript`.
+    /// Uninstall a preload script via
+    /// [`script.removePreloadScript`][spec].
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-removePreloadScript
     pub async fn remove_preload_script(&self, script: PreloadScriptId) -> Result<(), BidiError> {
         self.bidi
             .send(RemovePreloadScript {
@@ -370,7 +521,12 @@ impl<'a> ScriptModule<'a> {
         Ok(())
     }
 
-    /// `script.getRealms` — all realms.
+    /// List every realm via [`script.getRealms`][spec].
+    ///
+    /// To filter by context or realm type, build a [`GetRealms`] struct
+    /// directly.
+    ///
+    /// [spec]: https://w3c.github.io/webdriver-bidi/#command-script-getRealms
     pub async fn get_realms(&self) -> Result<GetRealmsResult, BidiError> {
         self.bidi
             .send(GetRealms {

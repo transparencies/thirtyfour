@@ -51,16 +51,25 @@ to see them.
 
 ## Common Event Types
 
-The most-used events are re-exported from
+Every typed event is re-exported from
 [`thirtyfour::bidi::events`][events-rustdoc] so a single `use` covers
 the common cases:
 
 ```rust
 use thirtyfour::bidi::events::{
-    Load, DomContentLoaded, NavigationStarted, FragmentNavigated,
+    // Page lifecycle
+    Load, DomContentLoaded, FragmentNavigated, HistoryUpdated,
+    NavigationStarted, NavigationCommitted, NavigationAborted, NavigationFailed,
+    // Tabs / frames
     ContextCreated, ContextDestroyed,
-    UserPromptOpened, UserPromptClosed,
+    // Downloads
+    DownloadWillBegin, DownloadEnd,
+    // User prompts and file dialogs
+    UserPromptOpened, UserPromptClosed, FileDialogOpened,
+    // Network
     BeforeRequestSent, ResponseStarted, ResponseCompleted, FetchError, AuthRequired,
+    // Script / log
+    RealmCreated, RealmDestroyed, ScriptMessage,
     LogEntryAdded,
 };
 ```
