@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, Empty};
-use crate::cdp::macros::string_enum;
+use crate::common::protocol::string_enum;
 use crate::error::WebDriverResult;
 
 string_enum! {

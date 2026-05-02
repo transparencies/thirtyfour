@@ -6,7 +6,7 @@ use crate::cdp::Cdp;
 use crate::cdp::command::{CdpCommand, CdpEvent, Empty};
 use crate::cdp::domains::network::{ErrorReason, ResourceType};
 use crate::cdp::ids::FetchRequestId;
-use crate::cdp::macros::string_enum;
+use crate::common::protocol::string_enum;
 use crate::error::WebDriverResult;
 
 string_enum! {

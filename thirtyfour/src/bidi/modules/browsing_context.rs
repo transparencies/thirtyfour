@@ -6,7 +6,7 @@ use crate::bidi::BiDi;
 use crate::bidi::command::{BidiCommand, BidiEvent, Empty};
 use crate::bidi::error::BidiError;
 use crate::bidi::ids::{BrowsingContextId, NavigationId, UserContextId};
-use crate::bidi::macros::string_enum;
+use crate::common::protocol::string_enum;
 
 string_enum! {
     /// Wait condition for [`Navigate`] (`browsingContext.navigate`).

@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::bidi::BiDi;
 use crate::bidi::command::BidiEvent;
 use crate::bidi::ids::RealmId;
-use crate::bidi::macros::string_enum;
+use crate::common::protocol::string_enum;
 
 string_enum! {
     /// Severity for [`events::EntryAdded`].

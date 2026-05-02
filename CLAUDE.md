@@ -63,7 +63,7 @@ wire-shape pitfalls with no compile-time signal:
   `null`; the transports coerce to `{}` so this works, but new types should
   serialise to a JSON object directly when feasible.
 - **Closed string sets**: use the [`string_enum!`] macro from
-  `cdp/macros.rs`, not raw `String` fields. The macro generates a
+  `common/protocol.rs`, not raw `String` fields. The macro generates a
   forward-compat `Unknown(String)` variant for values not yet known.
 - **Returns for `{}` results**: use `Empty` (the marker in `cdp/command.rs`),
   not `()` — `()` doesn't deserialize from `{}`.
@@ -76,4 +76,4 @@ the Rust struct has the wrong shape, a unit test that asserts the same
 wrong shape passes. Only a real browser tells you what CDP actually
 expects. Wire-shape unit tests are NOT accepted.
 
-[`string_enum!`]: thirtyfour/src/cdp/macros.rs
+[`string_enum!`]: thirtyfour/src/common/protocol.rs
