@@ -1,4 +1,13 @@
-//! `permissions.*` BiDi module — `setPermission`.
+//! `permissions.*` — grant, deny, or reset a [Permissions API][permapi]
+//! permission for a given origin.
+//!
+//! Defined by the [W3C Permissions specification's WebDriver-BiDi
+//! extension][spec] (a separate document from the core BiDi spec). Driver
+//! support is uneven — Chromium supports it; geckodriver currently
+//! returns `unknown command`.
+//!
+//! [permapi]: https://www.w3.org/TR/permissions/
+//! [spec]: https://w3c.github.io/permissions/#webdriver-bidi-extension
 
 use serde::Serialize;
 
@@ -9,31 +18,42 @@ use crate::bidi::ids::UserContextId;
 use crate::common::protocol::string_enum;
 
 string_enum! {
-    /// Permission state for [`SetPermission`].
+    /// Target state for [`SetPermission::state`]. Mirrors the spec's
+    /// `permissions.PermissionState` enumeration.
     pub enum PermissionState {
-        /// Allow.
+        /// Allow the permission without prompting.
         Granted = "granted",
-        /// Deny.
+        /// Deny the permission without prompting.
         Denied = "denied",
-        /// Reset to default ("ask").
+        /// Reset to default ("ask the user").
         Prompt = "prompt",
     }
 }
 
-/// `permissions.setPermission`.
+/// [`permissions.setPermission`][spec] — set the state of a permission
+/// for a given origin.
+///
+/// `descriptor` is a [Permissions API descriptor][descriptor] —
+/// typically `{"name": "<name>"}` for a basic permission, or with
+/// extra fields for permissions like `"push"` or `"midi"`.
+///
+/// [spec]: https://w3c.github.io/permissions/#webdriver-bidi-command-permissions-setPermission
+/// [descriptor]: https://www.w3.org/TR/permissions/#permission-descriptor
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetPermission {
-    /// Permission descriptor (`{"name":"geolocation"}`, etc.) — see
-    /// [Permissions API].
+    /// Permission descriptor, e.g. `{"name":"geolocation"}`,
+    /// `{"name":"midi","sysex":true}`. See [Permissions API].
     ///
     /// [Permissions API]: https://www.w3.org/TR/permissions/#permission-descriptor
     pub descriptor: serde_json::Value,
-    /// New state.
+    /// Target state.
     pub state: PermissionState,
-    /// Origin string (e.g. `"https://example.com"`).
+    /// Origin string (e.g. `"https://example.com"`). Must be an ASCII
+    /// serialised origin — paths and trailing slashes are not allowed.
     pub origin: String,
-    /// Restrict to a user context.
+    /// Restrict the change to a specific user context. `None` applies
+    /// to the default user context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_context: Option<UserContextId>,
 }
@@ -43,7 +63,12 @@ impl BidiCommand for SetPermission {
     type Returns = Empty;
 }
 
-/// Module facade returned by [`BiDi::permissions`].
+/// Convenience facade for the `permissions.*` module.
+///
+/// Returned by [`BiDi::permissions`](crate::bidi::BiDi::permissions). To
+/// scope the change to a non-default user context, build a
+/// [`SetPermission`] struct directly and supply
+/// [`user_context`][SetPermission::user_context].
 #[derive(Debug)]
 pub struct PermissionsModule<'a> {
     bidi: &'a BiDi,
@@ -56,7 +81,14 @@ impl<'a> PermissionsModule<'a> {
         }
     }
 
-    /// `permissions.setPermission`.
+    /// Set a permission for `origin` to `state` via
+    /// [`permissions.setPermission`][spec].
+    ///
+    /// `descriptor` is a [Permissions API descriptor][desc] JSON object
+    /// (`{"name":"geolocation"}`, etc.).
+    ///
+    /// [spec]: https://w3c.github.io/permissions/#webdriver-bidi-command-permissions-setPermission
+    /// [desc]: https://www.w3.org/TR/permissions/#permission-descriptor
     pub async fn set_permission(
         &self,
         descriptor: serde_json::Value,

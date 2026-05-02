@@ -19,8 +19,9 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use thirtyfour::bidi::events::{
-    BeforeRequestSent, ContextCreated, ContextDestroyed, DomContentLoaded, Load, LogEntryAdded,
-    NavigationStarted, RealmCreated, ResponseCompleted, ResponseStarted,
+    BeforeRequestSent, ContextCreated, ContextDestroyed, DomContentLoaded, HistoryUpdated, Load,
+    LogEntryAdded, NavigationCommitted, NavigationStarted, RealmCreated, ResponseCompleted,
+    ResponseStarted,
 };
 use thirtyfour::bidi::modules::{browsing_context, log, network};
 use thirtyfour::prelude::*;
@@ -357,6 +358,108 @@ async fn network_intercept_continue_request_unmodified() -> WebDriverResult<()> 
 
         // 5. Cleanup — remove the intercept explicitly via the guard.
         added.remove().await.map_err(bidi_to_wd)?;
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// browsingContext events — history & navigation lifecycle
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browsing_context_history_updated_event() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        // historyUpdated is optional; some drivers don't emit it. Use the
+        // best-effort subscribe pattern via the session command so we can
+        // bail cleanly if the wire-level subscribe fails.
+        let sub = bidi.session().subscribe("browsingContext.historyUpdated").await;
+        if let Err(e) = sub {
+            if matches!(
+                e.error.as_str(),
+                "unknown command" | "unknown method" | "unsupported operation" | "invalid argument"
+            ) {
+                return driver.quit().await;
+            }
+            return Err(bidi_to_wd(e));
+        }
+        let mut events = bidi.subscribe::<HistoryUpdated>().await.map_err(bidi_to_wd)?;
+        let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
+        let ctx = tree.contexts[0].context.clone();
+        bidi.browsing_context()
+            .navigate(
+                ctx.clone(),
+                "data:text/html,<html><body>x</body></html>",
+                Some(browsing_context::ReadinessState::Complete),
+            )
+            .await
+            .map_err(bidi_to_wd)?;
+        // Trigger pushState — that's the spec trigger for history updated.
+        bidi.script()
+            .evaluate(ctx.clone(), "history.pushState({}, '', '?upd=1')", false)
+            .await
+            .map_err(bidi_to_wd)?;
+        // Best-effort wait — some drivers don't emit. Use a shorter timeout
+        // and just exit cleanly if nothing arrives.
+        let res = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(evt) = events.next().await
+                    && evt.context == ctx
+                {
+                    return evt;
+                }
+            }
+        })
+        .await;
+        if let Ok(evt) = res {
+            assert!(evt.url.contains("upd=1"));
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browsing_context_navigation_committed_event() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let sub = bidi.session().subscribe("browsingContext.navigationCommitted").await;
+        if let Err(e) = sub {
+            if matches!(
+                e.error.as_str(),
+                "unknown command" | "unknown method" | "unsupported operation" | "invalid argument"
+            ) {
+                return driver.quit().await;
+            }
+            return Err(bidi_to_wd(e));
+        }
+        let mut events = bidi.subscribe::<NavigationCommitted>().await.map_err(bidi_to_wd)?;
+        let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
+        let ctx = tree.contexts[0].context.clone();
+        bidi.browsing_context()
+            .navigate(
+                ctx.clone(),
+                "data:text/html,<html><body>committed</body></html>",
+                Some(browsing_context::ReadinessState::Complete),
+            )
+            .await
+            .map_err(bidi_to_wd)?;
+        let res = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(evt) = events.next().await
+                    && evt.context == ctx
+                {
+                    return evt;
+                }
+            }
+        })
+        .await;
+        if let Ok(evt) = res {
+            assert!(evt.url.starts_with("data:text/html"));
+        }
         driver.quit().await
     })
     .await

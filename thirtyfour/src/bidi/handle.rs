@@ -1,7 +1,4 @@
 //! The [`BiDi`] handle — the entry point for WebDriver BiDi.
-//!
-//! Returned by [`crate::WebDriver::bidi`]. Cheap to clone (wraps an
-//! `Arc`-shared transport).
 
 use std::sync::Arc;
 
@@ -17,13 +14,40 @@ use super::transport::ws::BidiTransport;
 use crate::error::WebDriverResult;
 use crate::session::handle::SessionHandle;
 
-/// WebDriver BiDi handle.
+/// WebDriver BiDi connection handle.
 ///
-/// Cheap to clone; wraps an internal `Arc`. Open one with
-/// [`crate::WebDriver::bidi`]; the WebSocket is connected lazily on first
-/// call and reused thereafter.
+/// `BiDi` owns the WebSocket connection to the driver's BiDi endpoint
+/// and exposes typed access to every command and event via either:
+///
+/// - The module facades returned by [`session`](Self::session),
+///   [`browser`](Self::browser),
+///   [`browsing_context`](Self::browsing_context),
+///   [`script`](Self::script), [`network`](Self::network),
+///   [`storage`](Self::storage), [`log`](Self::log),
+///   [`input`](Self::input), [`permissions`](Self::permissions),
+///   [`emulation`](Self::emulation), and
+///   [`web_extension`](Self::web_extension); or
+/// - The lower-level [`send`](Self::send) /
+///   [`subscribe::<E>()`](Self::subscribe) primitives.
+///
+/// For commands or events outside the curated set, fall back to
+/// [`send_raw`](Self::send_raw) / [`subscribe_raw`](Self::subscribe_raw).
+///
+/// # Lifecycle and cloning
+///
+/// `BiDi` is cheap to clone — the underlying transport is `Arc`-wrapped
+/// — so it's idiomatic to pass clones into spawned tasks. The
+/// connection is established lazily by
+/// [`WebDriver::bidi`](crate::WebDriver::bidi) on first use; subsequent
+/// calls hand out clones of the same handle.
+///
+/// Subscription bookkeeping is reference-counted: each
+/// [`subscribe::<E>()`](Self::subscribe) call bumps a per-event
+/// counter, and the wire-level `session.unsubscribe` is sent
+/// automatically when the last stream for that event drops.
 ///
 /// # Example
+///
 /// ```no_run
 /// # use thirtyfour::prelude::*;
 /// # async fn run() -> WebDriverResult<()> {
@@ -42,8 +66,11 @@ pub struct BiDi {
 }
 
 impl BiDi {
-    /// Connect to the BiDi WebSocket discovered from the session's
-    /// capabilities.
+    /// Resolve the BiDi WebSocket URL from session capabilities and
+    /// connect.
+    ///
+    /// Internal: called once by
+    /// [`WebDriver::bidi`](crate::WebDriver::bidi) and cached.
     pub(crate) async fn connect(handle: Arc<SessionHandle>) -> WebDriverResult<Self> {
         let url = resolve_bidi_websocket_url(&handle)?;
         let transport = BidiTransport::connect(&url).await?;
@@ -54,7 +81,17 @@ impl BiDi {
 
     /// Send a typed BiDi command and decode its `result`.
     ///
+    /// `C: BidiCommand` carries both the wire method name (`C::METHOD`)
+    /// and the response type (`C::Returns`), so this is a single
+    /// generic surface for every command in the curated module set.
+    ///
+    /// Errors are returned as [`BidiError`], which mirrors the spec's
+    /// error envelope (`error`, `message`, optional `stacktrace`).
+    /// Serialise / deserialise failures are surfaced as a synthetic
+    /// `<serde>` command error.
+    ///
     /// # Example
+    ///
     /// ```no_run
     /// # use thirtyfour::prelude::*;
     /// # async fn run(driver: WebDriver) -> WebDriverResult<()> {
@@ -71,13 +108,16 @@ impl BiDi {
         serde_json::from_value(raw).map_err(serde_err)
     }
 
-    /// Send a BiDi command by name with the given params, returning the raw
-    /// `result` value. Useful for one-off commands that aren't in the
-    /// curated set under [`crate::bidi::modules`].
+    /// Send a BiDi command by name with the given params, returning the
+    /// raw `result` value.
     ///
-    /// `params` accepts anything `Serialize`. Pass `()` for commands that
-    /// take no parameters — the BiDi spec requires an object so the
-    /// transport coerces `null` to `{}`.
+    /// Useful for one-off commands that aren't in the curated set under
+    /// [`crate::bidi::modules`], or while prototyping a wire shape
+    /// before promoting it to a typed [`BidiCommand`] impl.
+    ///
+    /// `params` accepts anything `Serialize`. Pass `()` for commands
+    /// that take no parameters — the BiDi spec requires an object on
+    /// the wire, so the transport coerces `null` to `{}`.
     pub async fn send_raw<P: serde::Serialize>(
         &self,
         method: &str,
@@ -96,10 +136,11 @@ impl BiDi {
     ///
     /// For module-wide wildcards (e.g. `"browsingContext"` to receive
     /// every event in that module) there's no single typed event to
-    /// point at — fall back to [`Self::session`]`.subscribe(...)` and
-    /// [`Self::subscribe_raw`].
+    /// dispatch on — fall back to [`Self::session`]`.subscribe(...)`
+    /// followed by [`Self::subscribe_raw`].
     ///
     /// # Example
+    ///
     /// ```no_run
     /// # use thirtyfour::prelude::*;
     /// # use futures_util::StreamExt;
@@ -117,58 +158,83 @@ impl BiDi {
         Ok(EventStream::new(self.transport.clone(), self.transport.subscribe_events(), E::METHOD))
     }
 
-    /// Subscribe to all events on the BiDi connection as raw `(method, params)`.
+    /// Subscribe to every event on the BiDi connection as a raw
+    /// `(method, params)` stream.
     ///
     /// You're responsible for sending the matching `session.subscribe`
-    /// commands via [`Self::session`] — this method only returns the
-    /// local stream end and does no wire-level subscription on its own.
+    /// commands first via [`Self::session`] — this method only returns
+    /// the local stream end and does **no** wire-level subscription on
+    /// its own.
     pub fn subscribe_raw(&self) -> RawEventStream {
         RawEventStream::new(self.transport.subscribe_events())
     }
 
-    /// `session.*` module facade (status, subscribe, end, …).
+    /// Return the [`session.*`](crate::bidi::modules::session) facade
+    /// (status, subscribe, end).
     pub fn session(&self) -> modules::session::SessionModule<'_> {
         modules::session::SessionModule::new(self)
     }
 
-    /// `browser.*` module facade (close, user contexts).
+    /// Return the [`browser.*`](crate::bidi::modules::browser) facade
+    /// (close, user contexts, client windows, download behavior).
     pub fn browser(&self) -> modules::browser::BrowserModule<'_> {
         modules::browser::BrowserModule::new(self)
     }
 
-    /// `browsingContext.*` module facade (navigation, screenshots, tree …).
+    /// Return the [`browsingContext.*`](crate::bidi::modules::browsing_context)
+    /// facade (navigate, screenshots, tree, locate nodes, print, …).
     pub fn browsing_context(&self) -> modules::browsing_context::BrowsingContextModule<'_> {
         modules::browsing_context::BrowsingContextModule::new(self)
     }
 
-    /// `script.*` module facade (`evaluate`, `callFunction`, preload scripts).
+    /// Return the [`script.*`](crate::bidi::modules::script) facade
+    /// (`evaluate`, `callFunction`, preload scripts, realms).
     pub fn script(&self) -> modules::script::ScriptModule<'_> {
         modules::script::ScriptModule::new(self)
     }
 
-    /// `network.*` module facade (interception, modify req/resp).
+    /// Return the [`network.*`](crate::bidi::modules::network) facade
+    /// (interception, modify req/resp, data collectors, extra headers).
     pub fn network(&self) -> modules::network::NetworkModule<'_> {
         modules::network::NetworkModule::new(self)
     }
 
-    /// `storage.*` module facade (cookies, partitions).
+    /// Return the [`storage.*`](crate::bidi::modules::storage) facade
+    /// (cookies, partitions).
     pub fn storage(&self) -> modules::storage::StorageModule<'_> {
         modules::storage::StorageModule::new(self)
     }
 
-    /// `log.*` module facade (event-only — no commands).
+    /// Return the [`log.*`](crate::bidi::modules::log) facade
+    /// (event-only — subscribe via
+    /// [`subscribe::<LogEntryAdded>()`](Self::subscribe)).
     pub fn log(&self) -> modules::log::LogModule<'_> {
         modules::log::LogModule::new(self)
     }
 
-    /// `input.*` module facade (`performActions`, `releaseActions`, `setFiles`).
+    /// Return the [`input.*`](crate::bidi::modules::input) facade
+    /// (`performActions`, `releaseActions`, `setFiles`).
     pub fn input(&self) -> modules::input::InputModule<'_> {
         modules::input::InputModule::new(self)
     }
 
-    /// `permissions.*` module facade (`setPermission`).
+    /// Return the [`permissions.*`](crate::bidi::modules::permissions)
+    /// facade (`setPermission`).
     pub fn permissions(&self) -> modules::permissions::PermissionsModule<'_> {
         modules::permissions::PermissionsModule::new(self)
+    }
+
+    /// Return the [`emulation.*`](crate::bidi::modules::emulation)
+    /// facade (geolocation, locale, timezone, screen, user-agent
+    /// overrides).
+    pub fn emulation(&self) -> modules::emulation::EmulationModule<'_> {
+        modules::emulation::EmulationModule::new(self)
+    }
+
+    /// Return the [`webExtension.*`](crate::bidi::modules::web_extension)
+    /// facade (install / uninstall extensions).
+    pub fn web_extension(&self) -> modules::web_extension::WebExtensionModule<'_> {
+        modules::web_extension::WebExtensionModule::new(self)
     }
 }
 

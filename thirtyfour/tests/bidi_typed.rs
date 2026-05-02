@@ -20,7 +20,9 @@
 use std::future::Future;
 use std::time::Duration;
 
-use thirtyfour::bidi::modules::{browser, browsing_context, network, script};
+use thirtyfour::bidi::modules::{
+    browser, browsing_context, emulation, network, script, web_extension,
+};
 use thirtyfour::prelude::*;
 
 use crate::common::launch_managed_bidi;
@@ -640,6 +642,344 @@ async fn permissions_set_permission_best_effort() -> WebDriverResult<()> {
                     e.error.as_str(),
                     "unknown command" | "unknown method" | "unsupported operation"
                 ) => {}
+            Err(e) => return Err(bidi_to_wd(e)),
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// browser — client windows, download behavior
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browser_get_client_windows_lists_at_least_one() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi.browser().get_client_windows().await;
+        match res {
+            Ok(list) => {
+                assert!(!list.client_windows.is_empty(), "expected at least one client window");
+            }
+            // Some drivers don't yet implement getClientWindows.
+            Err(e)
+                if matches!(
+                    e.error.as_str(),
+                    "unknown command" | "unknown method" | "unsupported operation"
+                ) => {}
+            Err(e) => return Err(bidi_to_wd(e)),
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browser_set_download_behavior_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        // Pass `None` to clear; that's harmless on every driver and only
+        // exercises the wire shape for setDownloadBehavior.
+        let res = bidi.browser().set_download_behavior(None).await;
+        match res {
+            Ok(_) => {}
+            Err(e)
+                if matches!(
+                    e.error.as_str(),
+                    "unknown command" | "unknown method" | "unsupported operation"
+                ) => {}
+            Err(e) => return Err(bidi_to_wd(e)),
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// browsingContext — locateNodes, print, setBypassCSP
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browsing_context_locate_nodes_css() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
+        let ctx = tree.contexts[0].context.clone();
+        bidi.browsing_context()
+            .navigate(ctx.clone(), BLANK_HTML, Some(browsing_context::ReadinessState::Complete))
+            .await
+            .map_err(bidi_to_wd)?;
+        let res = bidi
+            .browsing_context()
+            .locate_nodes(ctx, browsing_context::Locator::css("input"))
+            .await;
+        match res {
+            Ok(found) => {
+                assert!(!found.nodes.is_empty(), "expected to find <input> in BLANK_HTML");
+            }
+            Err(e)
+                if matches!(
+                    e.error.as_str(),
+                    "unknown command" | "unknown method" | "unsupported operation"
+                ) => {}
+            Err(e) => return Err(bidi_to_wd(e)),
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browsing_context_print_returns_pdf_b64() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
+        let ctx = tree.contexts[0].context.clone();
+        bidi.browsing_context()
+            .navigate(ctx.clone(), BLANK_HTML, Some(browsing_context::ReadinessState::Complete))
+            .await
+            .map_err(bidi_to_wd)?;
+        let res = bidi.browsing_context().print(ctx).await;
+        match res {
+            Ok(out) => {
+                assert!(!out.data.is_empty());
+                // PDFs in base64 always start with "JVBERi" ("%PDF" prefix).
+                assert!(out.data.starts_with("JVBERi"), "unexpected PDF prefix");
+            }
+            Err(e)
+                if matches!(
+                    e.error.as_str(),
+                    "unknown command" | "unknown method" | "unsupported operation"
+                ) => {}
+            Err(e) => return Err(bidi_to_wd(e)),
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browsing_context_set_bypass_csp_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        // Just exercise the wire shape for both bypass-on and clear.
+        for v in [Some(true), None] {
+            let res = bidi.browsing_context().set_bypass_csp(v).await;
+            match res {
+                Ok(_) => {}
+                Err(e)
+                    if matches!(
+                        e.error.as_str(),
+                        "unknown command" | "unknown method" | "unsupported operation"
+                    ) => {}
+                Err(e) => return Err(bidi_to_wd(e)),
+            }
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// network — data collectors, extra headers
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn network_data_collector_add_remove_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res =
+            bidi.network().add_data_collector(vec![network::DataType::Response], 64 * 1024).await;
+        match res {
+            Ok(added) => {
+                assert!(!added.collector.as_str().is_empty());
+                bidi.network().remove_data_collector(added.collector).await.map_err(bidi_to_wd)?;
+            }
+            Err(e)
+                if matches!(
+                    e.error.as_str(),
+                    "unknown command" | "unknown method" | "unsupported operation"
+                ) => {}
+            Err(e) => return Err(bidi_to_wd(e)),
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn network_set_extra_headers_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let header = serde_json::json!({
+            "name": "X-Thirtyfour",
+            "value": {"type": "string", "value": "test"}
+        });
+        let res = bidi.network().set_extra_headers(vec![header]).await;
+        match res {
+            Ok(_) => {}
+            Err(e)
+                if matches!(
+                    e.error.as_str(),
+                    "unknown command" | "unknown method" | "unsupported operation"
+                ) => {}
+            Err(e) => return Err(bidi_to_wd(e)),
+        }
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// emulation
+// ---------------------------------------------------------------------------
+//
+// All of `emulation.*` is optional — best-effort accept the spec's
+// documented `unsupported operation` reply.
+
+async fn emulation_skip_ok(res: Result<(), thirtyfour::bidi::BidiError>) -> WebDriverResult<()> {
+    match res {
+        Ok(_) => Ok(()),
+        Err(e)
+            if matches!(
+                e.error.as_str(),
+                "unknown command" | "unknown method" | "unsupported operation" | "invalid argument"
+            ) =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(bidi_to_wd(e)),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn emulation_set_geolocation_override_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi
+            .emulation()
+            .set_geolocation_override(Some(emulation::GeolocationCoordinates {
+                latitude: -33.8688,
+                longitude: 151.2093,
+                accuracy: Some(50.0),
+                altitude: None,
+                altitude_accuracy: None,
+                heading: None,
+                speed: None,
+            }))
+            .await;
+        emulation_skip_ok(res).await?;
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn emulation_set_locale_override_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi.emulation().set_locale_override(Some("en-AU".into())).await;
+        emulation_skip_ok(res).await?;
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn emulation_set_timezone_override_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi.emulation().set_timezone_override(Some("Australia/Sydney".into())).await;
+        emulation_skip_ok(res).await?;
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn emulation_set_user_agent_override_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi.emulation().set_user_agent_override(Some("ThirtyFourTest/1.0".into())).await;
+        emulation_skip_ok(res).await?;
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn emulation_set_scripting_enabled_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi.emulation().set_scripting_enabled(Some(false)).await;
+        emulation_skip_ok(res).await?;
+        // Always try to clear the override so the rest of the session has
+        // JS — driver's response to the clear can also be unsupported.
+        let _ = bidi.emulation().set_scripting_enabled(None).await;
+        driver.quit().await
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn emulation_set_touch_override_best_effort() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi.emulation().set_touch_override(Some(5)).await;
+        emulation_skip_ok(res).await?;
+        driver.quit().await
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// webExtension
+// ---------------------------------------------------------------------------
+//
+// Only Firefox implements webExtension at the moment, and a real install
+// needs a packaged extension. Just hit `install` with a bogus path and
+// expect a typed error of one of the documented codes.
+
+#[tokio::test(flavor = "multi_thread")]
+async fn web_extension_install_invalid_path_returns_typed_error() -> WebDriverResult<()> {
+    with_timeout(async {
+        let driver = launch_managed_bidi().await?;
+        let bidi = driver.bidi().await?;
+        let res = bidi
+            .web_extension()
+            .install(web_extension::ExtensionData::Path {
+                path: "/nonexistent/path/to/extension".into(),
+            })
+            .await;
+        match res {
+            // Firefox: error("invalid web extension")
+            // Chrome: error("unknown error") with "Method not available." message
+            // Other: error("unknown command"/"unsupported operation")
+            Err(e)
+                if matches!(
+                    e.error.as_str(),
+                    "invalid web extension"
+                        | "invalid argument"
+                        | "unknown command"
+                        | "unknown method"
+                        | "unknown error"
+                        | "unsupported operation"
+                ) => {}
+            Ok(_) => panic!("expected an error from install with bogus path"),
             Err(e) => return Err(bidi_to_wd(e)),
         }
         driver.quit().await
