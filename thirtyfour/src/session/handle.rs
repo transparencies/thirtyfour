@@ -36,12 +36,17 @@ pub struct SessionHandle {
     session_id: SessionId,
     /// Session capabilities returned by `New Session` (vendor-prefixed
     /// fields like `goog:chromeOptions.debuggerAddress` and `se:cdp`
-    /// are read from here for CDP WebSocket discovery).
+    /// are read from here for CDP WebSocket discovery; W3C `webSocketUrl`
+    /// for BiDi).
     capabilities: Arc<Capabilities>,
     /// The config used by this instance.
     config: WebDriverConfig,
     /// quit session flag
     quit: Arc<OnceCell<()>>,
+    /// Lazily-connected WebDriver BiDi handle, shared by every clone of the
+    /// `SessionHandle`. Initialised on first call to [`crate::WebDriver::bidi`].
+    #[cfg(feature = "bidi")]
+    bidi: Arc<OnceCell<crate::bidi::BiDi>>,
     /// Optional opaque guard that keeps an external resource (e.g. a managed
     /// `chromedriver` subprocess) alive for as long as this session exists.
     /// Declared **last** so it drops after `quit` has run in the `Drop` impl.
@@ -79,6 +84,8 @@ impl SessionHandle {
             capabilities: Arc::new(capabilities),
             config,
             quit: Arc::new(OnceCell::new()),
+            #[cfg(feature = "bidi")]
+            bidi: Arc::new(OnceCell::new()),
             driver_guard,
         })
     }
@@ -93,9 +100,18 @@ impl SessionHandle {
             session_id: self.session_id.clone(),
             capabilities: Arc::clone(&self.capabilities),
             quit: Arc::clone(&self.quit),
+            #[cfg(feature = "bidi")]
+            bidi: Arc::clone(&self.bidi),
             config,
             driver_guard: self.driver_guard.clone(),
         }
+    }
+
+    /// Cached BiDi handle. Used by [`crate::WebDriver::bidi`] to lazy-init
+    /// once and reuse on subsequent calls.
+    #[cfg(feature = "bidi")]
+    pub(crate) fn bidi_cell(&self) -> &Arc<OnceCell<crate::bidi::BiDi>> {
+        &self.bidi
     }
 
     /// The session id for this webdriver session.
@@ -1233,6 +1249,8 @@ impl Drop for SessionHandle {
             session_id: self.session_id.clone(),
             capabilities: Arc::clone(&self.capabilities),
             config: self.config.clone(),
+            #[cfg(feature = "bidi")]
+            bidi: Arc::clone(&self.bidi),
             // The guard stays on the *original* SessionHandle so it drops after
             // this DropGuard's quit() future has run. The reconstructed handle
             // here is just the bits needed to issue the DELETE /session HTTP call.

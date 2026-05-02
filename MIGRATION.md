@@ -1,5 +1,53 @@
 # Migration guide
 
+## New: WebDriver BiDi support
+
+The `bidi` feature flag adds a typed WebDriver BiDi (W3C bidirectional
+protocol) layer alongside the classic HTTP API and CDP. It targets
+chromedriver ≥ 115 and geckodriver ≥ 0.31.
+
+```toml
+# Cargo.toml
+thirtyfour = { version = "0.37", features = ["bidi"] }
+```
+
+```rust
+use thirtyfour::prelude::*;
+
+let mut caps = DesiredCapabilities::chrome();
+caps.enable_bidi()?;                                  // sets `webSocketUrl: true`
+let driver = WebDriver::new("http://localhost:4444", caps).await?;
+
+let bidi = driver.bidi().await?;                      // lazy-connect the WS
+let status = bidi.session().status().await?;
+let tree   = bidi.browsing_context().get_tree(None).await?;
+let ctx    = tree.contexts[0].context.clone();
+
+bidi.browsing_context()
+    .navigate(ctx.clone(), "https://example.com", None)
+    .await?;
+
+let result = bidi.script().evaluate(ctx, "document.title", false).await?;
+println!("title: {:?}", result.ok_value());
+```
+
+Curated typed bindings for **session, browser, browsingContext, script,
+network, storage, log, input, permissions** are under
+`thirtyfour::bidi::modules::*`. Events use the same broadcast pattern as
+the existing CDP events:
+
+```rust
+use thirtyfour::bidi::modules::browsing_context::events::Load;
+use futures_util::StreamExt;
+
+bidi.session().subscribe("browsingContext.load").await?;
+let mut load_events = bidi.subscribe::<Load>();
+// ... navigate, then load_events.next().await ...
+```
+
+The handle is cached on the session, so `driver.bidi().await` is cheap on
+subsequent calls. Coexists with the classic HTTP API and `driver.cdp()`.
+
 ## 0.36 → 0.37
 
 The 0.37 release has two main themes: a full rewrite of the CDP layer,

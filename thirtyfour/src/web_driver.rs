@@ -175,6 +175,41 @@ impl WebDriver {
         builder
     }
 
+    /// Open (or return the already-cached) WebDriver BiDi handle for this
+    /// session.
+    ///
+    /// Requires `webSocketUrl: true` to have been set on the capabilities
+    /// before [`WebDriver::new`] (use
+    /// [`CapabilitiesHelper::enable_bidi`](crate::CapabilitiesHelper::enable_bidi))
+    /// so the driver returns a `webSocketUrl` string the BiDi handle can
+    /// dial.
+    ///
+    /// Lazy: the WebSocket isn't connected until the first call. Subsequent
+    /// calls return the same cached handle (cloning is cheap).
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use thirtyfour::prelude::*;
+    /// # async fn run() -> WebDriverResult<()> {
+    /// let mut caps = DesiredCapabilities::chrome();
+    /// caps.enable_bidi()?;
+    /// let driver = WebDriver::new("http://localhost:4444", caps).await?;
+    ///
+    /// let bidi = driver.bidi().await?;
+    /// let status = bidi.session().status().await?;
+    /// println!("BiDi ready: {}", status.ready);
+    /// # driver.quit().await }
+    /// ```
+    #[cfg(feature = "bidi")]
+    pub async fn bidi(&self) -> WebDriverResult<crate::bidi::BiDi> {
+        let handle = self.handle.clone();
+        let cell = self.handle.bidi_cell().clone();
+        let bidi = cell
+            .get_or_try_init(|| async move { crate::bidi::BiDi::connect(handle).await })
+            .await?;
+        Ok(bidi.clone())
+    }
+
     /// Get a Chrome DevTools Protocol handle for this session.
     ///
     /// Cheap to call (just clones the underlying `Arc<SessionHandle>`).
