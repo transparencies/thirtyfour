@@ -11,7 +11,7 @@ use thirtyfour::manager::WebDriverManager;
 use thirtyfour::prelude::*;
 use thirtyfour::support::block_on;
 use thirtyfour::{ChromeCapabilities, FirefoxCapabilities};
-use tokio::sync::{OnceCell, Semaphore, SemaphorePermit};
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 static SERVER: OnceLock<Arc<JoinHandle<()>>> = OnceLock::new();
 static LOGINIT: OnceLock<()> = OnceLock::new();
@@ -86,11 +86,20 @@ pub async fn lock_firefox(browser: &str) -> Option<SemaphorePermit<'static>> {
     }
 }
 
-/// Per-binary, per-browser `Arc<WebDriverManager>`. All test sessions in this
-/// binary share it so the manager's dedup map keeps a single driver
-/// subprocess alive across many `launch()` calls — instead of every
-/// `WebDriver::managed(caps)` call constructing a fresh manager and spawning
-/// its own driver.
+/// Per-binary, per-browser `Arc<WebDriverManager>`. Sharing one builder is
+/// cheap and keeps the binary's launches funnelling through a single
+/// dedup map — useful if tests ever overlap.
+///
+/// Note: with `--test-threads=1` the dedup map's `Weak` always fails to
+/// upgrade between tests (the previous test's `Arc` is gone before the
+/// next launches), so chromedriver is respawned per test. We tried
+/// pinning a long-lived "anchor" session in a static `OnceCell` to keep
+/// the `Arc` alive, but the anchor's tokio-bound resources (HTTP pool,
+/// driver stdio readers) end up tied to the *first* test's runtime, and
+/// when that runtime drops at end-of-test the anchor goes stale. On
+/// Windows that wedges chromedriver hard enough to hang the next test.
+/// The cross-binary download cache (default `cache_dir`) is the
+/// remaining win.
 fn manager_for(browser: &str) -> &'static Arc<WebDriverManager> {
     static CHROME: OnceLock<Arc<WebDriverManager>> = OnceLock::new();
     static FIREFOX: OnceLock<Arc<WebDriverManager>> = OnceLock::new();
@@ -102,30 +111,10 @@ fn manager_for(browser: &str) -> &'static Arc<WebDriverManager> {
     cell.get_or_init(|| WebDriverManager::builder().build())
 }
 
-/// Long-lived "anchor" session whose `Arc<ManagedDriverProcess>` keeps the
-/// chromedriver subprocess alive across tests within this binary. Without
-/// it, the dedup map only holds a `Weak`, so a `--test-threads=1` run
-/// kills + respawns the driver between every test.
-///
-/// Firefox is intentionally NOT anchored: geckodriver concurrent-session
-/// behaviour is fragile and the test harness already serialises Firefox
-/// runs via [`get_limiter`], so an anchor would just hold the only slot.
-async fn ensure_anchor(browser: &str, mgr: &Arc<WebDriverManager>) {
-    static CHROME_ANCHOR: OnceCell<WebDriver> = OnceCell::const_new();
-    if browser == "chrome" {
-        CHROME_ANCHOR
-            .get_or_init(|| async {
-                mgr.launch(make_chrome_caps()).await.expect("chrome anchor session")
-            })
-            .await;
-    }
-}
-
 /// Launch the specified browser via the shared per-binary [`WebDriverManager`].
 pub async fn launch_browser(browser: &str) -> WebDriver {
     tracing::debug!("launching browser {browser}");
     let mgr = manager_for(browser);
-    ensure_anchor(browser, mgr).await;
     match browser {
         "chrome" => mgr.launch(make_chrome_caps()).await.expect("Failed to launch chrome"),
         "firefox" => mgr.launch(make_firefox_caps()).await.expect("Failed to launch firefox"),
@@ -133,15 +122,12 @@ pub async fn launch_browser(browser: &str) -> WebDriver {
     }
 }
 
-/// Launch a Chrome session against the binary's shared chromedriver. Used
-/// from test files that don't go through [`TestHarness`] — the managed CDP
-/// and `ElementQuery` integration tests — so all sibling tests in the same
-/// binary reuse one chromedriver subprocess instead of each constructing
-/// its own [`WebDriverManager`] (which is what bare
-/// `WebDriver::managed(caps).await` would do).
+/// Launch a Chrome session against the binary's shared [`WebDriverManager`].
+/// Used from test files that don't go through [`TestHarness`] — the managed
+/// CDP and `ElementQuery` integration tests — so all sibling tests funnel
+/// through one manager instead of constructing a fresh one each call.
 pub async fn launch_managed_chrome(caps: ChromeCapabilities) -> WebDriverResult<WebDriver> {
     let mgr = manager_for("chrome");
-    ensure_anchor("chrome", mgr).await;
     mgr.launch(caps).await
 }
 

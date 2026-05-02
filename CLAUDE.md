@@ -26,14 +26,17 @@ cargo fmt && cargo clippy --all-features --all-targets && cargo doc --no-deps --
 - The integration tests under `thirtyfour/tests/*.rs` (other than `managed.rs`)
   use `WebDriver::managed`, so they download and lifetime-manage their own
   `chromedriver` / `geckodriver`. You only need a local browser install
-  (Chrome by default; set `THIRTYFOUR_BROWSER=firefox` to switch).
-  Within a binary, all `TestHarness::new()` calls share one driver
-  subprocess via a static `WebDriverManager` plus an "anchor" session held
-  in a `OnceCell` (see `thirtyfour/tests/common.rs`).
+  (Chrome by default; set `THIRTYFOUR_BROWSER=firefox` to switch). Within a
+  binary, launches funnel through a single static `WebDriverManager` (see
+  `thirtyfour/tests/common.rs`); the cross-binary download cache lives in
+  the manager's default `cache_dir`. **Don't add a long-lived "anchor"
+  session to keep the driver subprocess alive across tests** — its
+  tokio-bound resources (HTTP pool, driver stdio readers) end up pinned to
+  the first test's `#[tokio::test]` runtime, and when that runtime drops it
+  wedges chromedriver on Windows.
 - `thirtyfour/tests/managed.rs` is gated behind the `manager-tests` cargo
   feature and runs in its own `manager-test.yml` workflow. It exercises the
-  manager's lifecycle semantics directly (no shared anchor, since some tests
-  rely on the driver being the only Arc holder). Run locally with:
+  manager's lifecycle semantics directly. Run locally with:
   ```bash
   cargo test -p thirtyfour --features manager-tests --test managed -- --test-threads=1
   ```
