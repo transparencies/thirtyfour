@@ -24,12 +24,16 @@ cargo fmt && cargo clippy --all-features --all-targets && cargo doc --no-deps --
 - `cargo test -p thirtyfour --lib` — fast unit tests, run on every change.
 - `cargo test -p thirtyfour --doc` — doc tests; rarely break, but cheap to run.
 - The integration tests under `thirtyfour/tests/*.rs` (other than `managed.rs`)
-  require a running `chromedriver` / `geckodriver` on the standard ports
-  (9515 / 4444). The `cargo test` workflow in CI starts those automatically;
-  locally you'd start them yourself before running.
+  use `WebDriver::managed`, so they download and lifetime-manage their own
+  `chromedriver` / `geckodriver`. You only need a local browser install
+  (Chrome by default; set `THIRTYFOUR_BROWSER=firefox` to switch).
+  Within a binary, all `TestHarness::new()` calls share one driver
+  subprocess via a static `WebDriverManager` plus an "anchor" session held
+  in a `OnceCell` (see `thirtyfour/tests/common.rs`).
 - `thirtyfour/tests/managed.rs` is gated behind the `manager-tests` cargo
-  feature and runs in its own `manager-test.yml` workflow that does *not*
-  pre-start drivers (the manager spawns them). Run locally with:
+  feature and runs in its own `manager-test.yml` workflow. It exercises the
+  manager's lifecycle semantics directly (no shared anchor, since some tests
+  rely on the driver being the only Arc holder). Run locally with:
   ```bash
   cargo test -p thirtyfour --features manager-tests --test managed -- --test-threads=1
   ```

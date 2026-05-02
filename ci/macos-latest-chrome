@@ -1,3 +1,0 @@
-#!/bin/bash
-# Chrome and chromedriver are pre-installed on GitHub-hosted macOS runners.
-"$CHROMEWEBDRIVER/chromedriver" --port=9515 &

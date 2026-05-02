@@ -8,10 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install browsers
-        run: |
-          ./ci/ubuntu-latest-firefox
-          ./ci/ubuntu-latest-chrome
+      # No driver install step: tests use `WebDriver::managed`, which downloads
+      # and lifetime-manages chromedriver / geckodriver itself. The browsers
+      # themselves are pre-installed on GitHub-hosted runners.
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal

@@ -1,4 +1,0 @@
-#!/bin/bash
-# Firefox and geckodriver are pre-installed on GitHub-hosted Ubuntu runners.
-# GECKOWEBDRIVER points at the directory holding the version-matched binary.
-"$GECKOWEBDRIVER/geckodriver" --port=4444 &
