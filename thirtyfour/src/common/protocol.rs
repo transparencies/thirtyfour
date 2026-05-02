@@ -1,20 +1,20 @@
-//! Shared building blocks used by the CDP and BiDi layers.
+//! Internal building blocks used by the CDP and BiDi layers.
 //!
-//! Both protocols are JSON-RPC-shaped, so they need the same handful of
-//! primitives:
+//! Both protocols are JSON-RPC-shaped, so the same handful of macros end
+//! up useful in both places:
 //!
-//! - [`string_enum!`] — closed-set enums with a forward-compat
+//! - `string_enum!` — closed-set enums with a forward-compat
 //!   `Unknown(String)` variant.
-//! - [`string_id!`] / [`int_id!`] — `#[serde(transparent)]` newtypes for
+//! - `string_id!` / `int_id!` — `#[serde(transparent)]` newtypes for
 //!   opaque ids that look identical on the wire but mustn't be mixed up
 //!   in Rust.
-//! - [`Empty`] — marker for commands whose response body is `{}`.
 //!
-//! These all used to live in duplicate copies under `cdp::` and `bidi::`.
-//! Each protocol module still re-exports the macros and `Empty` so call
-//! sites read naturally (e.g. `cdp::macros::string_enum`).
-
-use serde::{Deserialize, Serialize};
+//! These used to live in duplicate copies under `cdp::macros` /
+//! `cdp::ids` and `bidi::macros` / `bidi::ids`. They're shared from here
+//! now via crate-private `pub(crate) use`. Public types each protocol
+//! exposes (its own `CdpCommand` / `BidiCommand`, `Empty`, ids, …)
+//! continue to live in the protocol module so user-facing import paths
+//! stay protocol-local.
 
 /// Define a closed-set string enum with a forward-compat `Unknown(String)`
 /// escape hatch.
@@ -197,16 +197,6 @@ pub(crate) use int_id;
 pub(crate) use string_enum;
 pub(crate) use string_id;
 
-/// Marker for commands whose response body is the empty object `{}`.
-///
-/// Many CDP and BiDi commands (`Network.enable`, `Page.reload`,
-/// `session.subscribe`, `script.removePreloadScript`, …) return an empty
-/// object on success. Use this as the `Returns` associated type on
-/// [`crate::cdp::CdpCommand`] / [`crate::bidi::BidiCommand`].
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Empty {}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -282,12 +272,5 @@ mod tests {
         assert_eq!(serde_json::to_value(id).unwrap(), json!(42));
         assert_eq!(format!("{id}"), "42");
         assert_eq!(BarId::new(7), BarId::from(7));
-    }
-
-    #[test]
-    fn empty_round_trips_as_empty_object() {
-        let e = super::Empty::default();
-        assert_eq!(serde_json::to_value(e).unwrap(), json!({}));
-        let _: super::Empty = serde_json::from_value(json!({})).unwrap();
     }
 }

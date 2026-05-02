@@ -1,19 +1,22 @@
 //! `storage.*` BiDi module — cookies and storage partitions.
 //!
-//! Public types reuse [`crate::common::cookie::Cookie`] and
-//! [`crate::common::cookie::SameSite`] so callers don't have to learn a
-//! second cookie shape; the BiDi wire format (lowercase `sameSite`,
+//! Cookies use the crate-wide [`Cookie`] and [`SameSite`] types from
+//! [`crate::cookie`], so callers don't have to learn a second cookie
+//! shape. The BiDi wire format (lowercase `sameSite`,
 //! `network.BytesValue`-wrapped values) is handled internally via the
 //! serde adapters in `crate::common::cookie::bidi`.
+//!
+//! [`Cookie`]: crate::Cookie
+//! [`SameSite`]: crate::SameSite
 
 use serde::{Deserialize, Serialize};
 
+use crate::Cookie;
+use crate::SameSite;
 use crate::bidi::BiDi;
 use crate::bidi::command::BidiCommand;
 use crate::bidi::error::BidiError;
 use crate::common::cookie::bidi::{bytes_string, same_site, string_from_bytes_value};
-
-pub use crate::common::cookie::{Cookie, SameSite};
 
 /// Cookie partition descriptor.
 ///

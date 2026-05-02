@@ -6,10 +6,7 @@
 //! infrastructure will pick it up. [`BidiEvent`] is the same idea for events
 //! delivered to an active subscription.
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-
-pub use crate::common::protocol::Empty;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// A typed BiDi command.
 ///
@@ -53,6 +50,14 @@ pub trait BidiEvent: DeserializeOwned + Clone + Send + Sync + 'static {
     /// Wire name of the event (e.g. `"browsingContext.load"`).
     const METHOD: &'static str;
 }
+
+/// Marker type for BiDi commands whose response `result` body is `{}`.
+///
+/// Many commands (`session.subscribe`, `browsingContext.close`,
+/// `script.removePreloadScript`, …) return an empty object on success.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Empty {}
 
 /// A raw event delivered by [`crate::bidi::BiDi::subscribe_raw`].
 #[derive(Debug, Clone)]

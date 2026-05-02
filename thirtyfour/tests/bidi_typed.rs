@@ -20,7 +20,7 @@
 use std::future::Future;
 use std::time::Duration;
 
-use thirtyfour::bidi::modules::{browser, browsing_context, network, script, storage};
+use thirtyfour::bidi::modules::{browser, browsing_context, network, script};
 use thirtyfour::prelude::*;
 
 use crate::common::launch_managed_bidi;
@@ -520,7 +520,7 @@ async fn storage_set_get_delete_cookie_round_trip() -> WebDriverResult<()> {
         cookie.set_path("/");
         cookie.set_http_only(false);
         cookie.set_secure(false);
-        cookie.set_same_site(storage::SameSite::Lax);
+        cookie.set_same_site(SameSite::Lax);
         bidi.storage().set_cookie(cookie).await.map_err(bidi_to_wd)?;
         let got = bidi.storage().get_cookies_by_name("thirtyfour").await.map_err(bidi_to_wd)?;
         assert_eq!(got.cookies.len(), 1);
