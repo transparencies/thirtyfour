@@ -59,9 +59,18 @@ pub fn element_is_not_clickable(ignore_errors: bool) -> impl ElementPredicate {
     move |elem: WebElement| async move { negate(elem.is_clickable().await, ignore_errors) }
 }
 
-/// Predicate that returns true for elements that have the specified class name.
-/// See the `Needle` documentation for more details on text matching rules.
-/// In particular, it is recommended to use StringMatch or Regex to perform a whole-word search.
+/// True if `needle` matches any whitespace-separated token in `class_attr`.
+/// The HTML `class` attribute is a token list, so matching the full attribute
+/// string would mean `needle == "foo"` could never match `class="a foo b"` —
+/// see issue #259.
+fn class_attr_matches_token<N: Needle>(needle: &N, class_attr: &str) -> bool {
+    class_attr.split_whitespace().any(|tok| needle.is_match(tok))
+}
+
+/// Predicate that returns true for elements where any token in the `class`
+/// attribute matches `class_name`. See the `Needle` documentation for more
+/// details on text matching rules — the needle is run against each
+/// whitespace-separated class token, not the full attribute string.
 pub fn element_has_class<N>(class_name: N, ignore_errors: bool) -> impl ElementPredicate
 where
     N: Needle + Clone + Send + Sync + 'static,
@@ -70,7 +79,7 @@ where
         let class_name = class_name.clone();
         async move {
             match elem.class_name().await {
-                Ok(Some(x)) => Ok(class_name.is_match(&x)),
+                Ok(Some(x)) => Ok(class_attr_matches_token(&class_name, &x)),
                 Ok(None) => Ok(false),
                 Err(e) => handle_errors(Err(e), ignore_errors),
             }
@@ -78,9 +87,10 @@ where
     }
 }
 
-/// Predicate that returns true for elements that do not contain the specified class name.
-/// See the `Needle` documentation for more details on text matching rules.
-/// In particular, it is recommended to use StringMatch or Regex to perform a whole-word search.
+/// Predicate that returns true for elements where no token in the `class`
+/// attribute matches `class_name`. See the `Needle` documentation for more
+/// details on text matching rules — the needle is run against each
+/// whitespace-separated class token, not the full attribute string.
 pub fn element_lacks_class<N>(class_name: N, ignore_errors: bool) -> impl ElementPredicate
 where
     N: Needle + Clone + Send + Sync + 'static,
@@ -89,7 +99,7 @@ where
         let class_name = class_name.clone();
         async move {
             match elem.class_name().await {
-                Ok(Some(x)) => Ok(!class_name.is_match(&x)),
+                Ok(Some(x)) => Ok(!class_attr_matches_token(&class_name, &x)),
                 Ok(None) => Ok(true),
                 Err(e) => handle_errors(Err(e), ignore_errors),
             }

@@ -169,3 +169,92 @@ async fn managed_chrome_options_and_dedup() -> WebDriverResult<()> {
     })
     .await
 }
+
+/// True if a TCP connect to the driver's `host:port` succeeds, i.e. the
+/// chromedriver subprocess is still listening.
+async fn driver_is_listening(server_url: &url::Url) -> bool {
+    let host = server_url.host_str().unwrap_or("127.0.0.1");
+    let port = server_url.port_or_known_default().unwrap_or(0);
+    tokio::time::timeout(Duration::from_secs(1), tokio::net::TcpStream::connect((host, port)))
+        .await
+        .map(|r| r.is_ok())
+        .unwrap_or(false)
+}
+
+/// Issue #281: dropping a `WebDriver` without calling `quit()` should still
+/// close the session and (for managed drivers) kill the chromedriver
+/// subprocess. `SessionHandle::Drop` runs `quit()` synchronously via
+/// `spawn_blocked_future`, and `ManagedDriverProcess::Drop` SIGKILLs the
+/// subprocess.
+#[tokio::test(flavor = "multi_thread")]
+async fn dropping_managed_driver_kills_subprocess() -> WebDriverResult<()> {
+    with_timeout(async {
+        let server_url = {
+            let driver = WebDriver::managed(chrome_caps()).await?;
+            let url = driver.server_url().clone();
+            assert!(driver_is_listening(&url).await, "driver should be listening while alive");
+            if !skip_navigation() {
+                driver.goto("about:blank").await?;
+            }
+            url
+            // No explicit `driver.quit().await` — drop fires here, which must
+            // run quit() and then SIGKILL the subprocess.
+        };
+
+        // Give SIGKILL a moment to actually reap the process.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        assert!(
+            !driver_is_listening(&server_url).await,
+            "chromedriver at {server_url} should be gone after WebDriver was dropped without quit"
+        );
+        Ok(())
+    })
+    .await
+}
+
+/// Issue #281 specifically: panic unwind drops the in-scope `WebDriver`,
+/// which must run the same `quit + kill subprocess` path as a clean drop.
+/// Users should never need a custom `Drop` guard with `block_on` — that's
+/// what `SessionHandle::Drop` already does internally.
+#[tokio::test(flavor = "multi_thread")]
+async fn panic_unwind_kills_managed_driver_subprocess() -> WebDriverResult<()> {
+    use std::sync::{Arc, Mutex};
+
+    with_timeout(async {
+        let captured: Arc<Mutex<Option<url::Url>>> = Arc::new(Mutex::new(None));
+        let captured_clone = Arc::clone(&captured);
+
+        // Run the panicking code on a dedicated thread so the unwind happens
+        // there and we can `join()` to observe it. The `WebDriver` is held
+        // when `panic!` fires; the unwind must drop it cleanly.
+        let join = std::thread::spawn(move || {
+            thirtyfour::support::block_on(async move {
+                let driver = WebDriver::managed(chrome_caps()).await.expect("managed launch");
+                *captured_clone.lock().unwrap() = Some(driver.server_url().clone());
+                if !skip_navigation() {
+                    driver.goto("about:blank").await.expect("goto");
+                }
+                panic!("simulated user panic with WebDriver still in scope");
+            });
+        })
+        .join();
+
+        assert!(join.is_err(), "thread should have panicked");
+
+        let url = captured
+            .lock()
+            .unwrap()
+            .take()
+            .expect("server URL should have been captured before panic");
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        assert!(
+            !driver_is_listening(&url).await,
+            "chromedriver at {url} should be gone after panic unwind dropped the WebDriver"
+        );
+        Ok(())
+    })
+    .await
+}
