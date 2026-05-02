@@ -18,8 +18,13 @@ jobs:
           crate: cargo-hack
           version: latest
           use-tool-cache: true
-      - name: cargo hack
+      - name: cargo hack (each feature)
         uses: actions-rs/cargo@v1
         with:
           command: hack
-          args: --feature-powerset --exclude-features bench_private check
+          args: --each-feature --exclude-features manager-tests check
+      - name: cargo check (bidi + cdp-events)
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --features bidi,cdp-events

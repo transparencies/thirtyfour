@@ -93,8 +93,7 @@
 //! This also allows you to catch errors during quitting, and possibly panic or report back to the user
 //!
 //! If you do not call [`WebDriver::quit`] **your async executor will be blocked** meaning no futures can run
-//! while quiting. you can use the feature `debug_sync_quit` to get a backtrace printed if your webdriver ever
-//! quits synchronously
+//! while quitting. The synchronous fallback also emits a `tracing` warning so you can spot it in logs.
 //!
 //! ### Element queries and explicit waits
 //!

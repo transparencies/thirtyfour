@@ -183,11 +183,25 @@ async fn driver_is_listening(server_url: &url::Url) -> bool {
 
 /// Issue #281: dropping a `WebDriver` without calling `quit()` should still
 /// close the session and (for managed drivers) kill the chromedriver
-/// subprocess. `SessionHandle::Drop` runs `quit()` synchronously via
-/// `spawn_blocked_future`, and `ManagedDriverProcess::Drop` SIGKILLs the
-/// subprocess.
+/// subprocess. `SessionHandle::Drop` spawns a dedicated OS thread that
+/// builds a fresh `current_thread` tokio runtime, runs `quit()` on it, and
+/// joins synchronously so Drop blocks until the DELETE /session call
+/// completes. `ManagedDriverProcess::Drop` then SIGKILLs the subprocess.
+///
+/// Tested under both runtime flavors because the cleanup path must not
+/// rely on the caller's runtime — the OS thread + fresh runtime trick has
+/// to work whether the caller is on `multi_thread` or `current_thread`.
 #[tokio::test(flavor = "multi_thread")]
-async fn dropping_managed_driver_kills_subprocess() -> WebDriverResult<()> {
+async fn dropping_managed_driver_kills_subprocess_multi_thread() -> WebDriverResult<()> {
+    drop_kills_subprocess_inner().await
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn dropping_managed_driver_kills_subprocess_current_thread() -> WebDriverResult<()> {
+    drop_kills_subprocess_inner().await
+}
+
+async fn drop_kills_subprocess_inner() -> WebDriverResult<()> {
     with_timeout(async {
         let server_url = {
             let driver = WebDriver::managed(chrome_caps()).await?;
