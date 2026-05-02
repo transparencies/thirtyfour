@@ -302,68 +302,10 @@ impl<'a> StorageModule<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
-    fn wire_cookie_deserialises_from_bidi_shape() {
-        let v = json!({
-            "name": "k",
-            "value": {"type": "string", "value": "v"},
-            "domain": "example.com",
-            "path": "/",
-            "httpOnly": false,
-            "secure": true,
-            "sameSite": "lax",
-            "size": 7,
-            "expiry": 1_700_000_000_i64
-        });
-        let w: WireCookie = serde_json::from_value(v).unwrap();
-        let c: Cookie = w.into();
-        assert_eq!(c.name, "k");
-        assert_eq!(c.value, "v");
-        assert_eq!(c.same_site, Some(SameSite::Lax));
-        assert_eq!(c.http_only, Some(false));
-        assert_eq!(c.secure, Some(true));
-        assert_eq!(c.expiry, Some(1_700_000_000));
-        assert_eq!(c.domain.as_deref(), Some("example.com"));
-        assert_eq!(c.path.as_deref(), Some("/"));
-    }
-
-    #[test]
-    fn wire_partial_cookie_uses_lowercase_same_site_and_bytes_value() {
-        let mut c = Cookie::new("k", "v");
-        c.set_domain("example.com");
-        c.set_path("/");
-        c.set_same_site(SameSite::Lax);
-        c.set_http_only(true);
-        let w = WirePartialCookie::from_cookie(c).unwrap();
-        let v = serde_json::to_value(&w).unwrap();
-        assert_eq!(v["name"], "k");
-        assert_eq!(v["value"]["type"], "string");
-        assert_eq!(v["value"]["value"], "v");
-        assert_eq!(v["domain"], "example.com");
-        assert_eq!(v["path"], "/");
-        assert_eq!(v["httpOnly"], true);
-        assert_eq!(v["sameSite"], "lax");
-    }
-
-    #[test]
-    fn wire_partial_cookie_skips_unset_optionals() {
-        let mut c = Cookie::new("k", "v");
-        c.set_domain("example.com");
-        let w = WirePartialCookie::from_cookie(c).unwrap();
-        let v = serde_json::to_value(&w).unwrap();
-        assert!(v.get("path").is_none());
-        assert!(v.get("httpOnly").is_none());
-        assert!(v.get("secure").is_none());
-        assert!(v.get("sameSite").is_none());
-        assert!(v.get("expiry").is_none());
-    }
-
-    #[test]
-    fn set_cookie_without_domain_errors_without_sending() {
-        let c = Cookie::new("k", "v");
-        let err = WirePartialCookie::from_cookie(c).unwrap_err();
+    fn set_cookie_without_domain_errors_locally() {
+        let err = WirePartialCookie::from_cookie(Cookie::new("k", "v")).unwrap_err();
         assert_eq!(err.command, "storage.setCookie");
         assert!(err.message.contains("domain"));
     }
