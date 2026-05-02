@@ -1256,25 +1256,15 @@ impl Drop for SessionHandle {
             driver_guard: None,
         });
 
-        // Run the DELETE /session call on a freshly-built single-thread tokio
-        // runtime, on a dedicated OS thread, joined synchronously so Drop blocks
-        // until cleanup finishes. The new thread has no tokio context, so building
-        // a runtime on it is fine even when the user is inside their own runtime.
-        // We also rebuild the HttpClient because the IO drivers from the original
-        // runtime may already be gone.
+        // Run the DELETE /session call on `support::GLOBAL_RT` from a dedicated
+        // OS thread, joined synchronously so Drop blocks until cleanup finishes.
+        // The new thread escapes any user tokio runtime context (since
+        // `support::block_on` uses `Handle::block_on`, which panics from inside
+        // another runtime). We also rebuild the HttpClient because its IO
+        // drivers were tied to the user's runtime — the future polls on
+        // `GLOBAL_RT`, so the client needs fresh drivers there.
         let _ = std::thread::spawn(move || {
-            let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
-                Ok(rt) => rt,
-                Err(err) => {
-                    tracing::warn!(
-                        %err,
-                        "failed to build cleanup runtime; WebDriver session may leak \
-                         until the driver times it out"
-                    );
-                    return;
-                }
-            };
-            rt.block_on(async move {
+            support::block_on(async move {
                 this.client = this.client.new().await;
                 if let Err(err) = this.quit().await {
                     tracing::warn!(
