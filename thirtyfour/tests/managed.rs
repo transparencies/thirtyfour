@@ -184,13 +184,13 @@ async fn driver_is_listening(server_url: &url::Url) -> bool {
 /// Issue #281: dropping a `WebDriver` without calling `quit()` should still
 /// close the session and (for managed drivers) kill the chromedriver
 /// subprocess. `SessionHandle::Drop` spawns a dedicated OS thread that
-/// builds a fresh `current_thread` tokio runtime, runs `quit()` on it, and
-/// joins synchronously so Drop blocks until the DELETE /session call
+/// runs `quit()` via `support::block_on` (process-wide `GLOBAL_RT`),
+/// joining synchronously so Drop blocks until the DELETE /session call
 /// completes. `ManagedDriverProcess::Drop` then SIGKILLs the subprocess.
 ///
 /// Tested under both runtime flavors because the cleanup path must not
-/// rely on the caller's runtime — the OS thread + fresh runtime trick has
-/// to work whether the caller is on `multi_thread` or `current_thread`.
+/// rely on the caller's runtime — the OS thread + GLOBAL_RT trick has to
+/// work whether the caller is on `multi_thread` or `current_thread`.
 #[tokio::test(flavor = "multi_thread")]
 async fn dropping_managed_driver_kills_subprocess_multi_thread() -> WebDriverResult<()> {
     drop_kills_subprocess_inner().await
@@ -268,6 +268,58 @@ async fn panic_unwind_kills_managed_driver_subprocess() -> WebDriverResult<()> {
             !driver_is_listening(&url).await,
             "chromedriver at {url} should be gone after panic unwind dropped the WebDriver"
         );
+        Ok(())
+    })
+    .await
+}
+
+/// Several `WebDriver`s dropped at the same instant must all clean up.
+///
+/// Each `SessionHandle::Drop` spawns its own OS thread that calls
+/// `support::block_on` (i.e. `Handle::block_on` on the process-wide
+/// `GLOBAL_RT`). This test fires N drops concurrently so multiple OS
+/// threads all park on `GLOBAL_RT` simultaneously — guards against any
+/// regression where the cleanup path serialises through a shared
+/// resource and deadlocks when more than one drop is in flight.
+///
+/// Each `WebDriver::managed` call builds a fresh `WebDriverManager`,
+/// so the N sessions back onto N independent chromedriver subprocesses
+/// — we can verify each one is gone independently after its drop.
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_drops_kill_all_subprocesses() -> WebDriverResult<()> {
+    const N: usize = 3;
+
+    with_timeout(async {
+        // Spin up N drivers in parallel. Wrap each builder's `IntoFuture` in
+        // an explicit async block so `try_join_all` sees a concrete `Future`.
+        let drivers: Vec<WebDriver> = futures_util::future::try_join_all(
+            (0..N).map(|_| async { WebDriver::managed(chrome_caps()).await }),
+        )
+        .await?;
+
+        let urls: Vec<url::Url> = drivers.iter().map(|d| d.server_url().clone()).collect();
+        for url in &urls {
+            assert!(driver_is_listening(url).await, "driver at {url} should be listening");
+        }
+
+        // Drop each driver on its own OS thread so the Drops run concurrently
+        // (vs. `drop(Vec)` which would run them sequentially). All cleanup
+        // threads call `Handle::block_on` on the shared GLOBAL_RT at once.
+        let drop_threads: Vec<_> =
+            drivers.into_iter().map(|d| std::thread::spawn(move || drop(d))).collect();
+        for t in drop_threads {
+            t.join().expect("drop thread panicked");
+        }
+
+        // Give SIGKILL a moment to actually reap the processes.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        for url in &urls {
+            assert!(
+                !driver_is_listening(url).await,
+                "chromedriver at {url} should be gone after concurrent drop"
+            );
+        }
         Ok(())
     })
     .await

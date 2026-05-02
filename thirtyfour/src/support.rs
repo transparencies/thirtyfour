@@ -56,6 +56,18 @@ static GLOBAL_RT: LazyLock<tokio::runtime::Handle> = LazyLock::new(|| {
     })
 });
 
+/// Stack-overflow guard for `block_on`: futures larger than this get
+/// `Box::pin`'d before being handed to tokio. Async state machines can
+/// be surprisingly large (every local variable across every `.await` is
+/// stored inline), and `block_on` is called from `SessionHandle::Drop`
+/// — a context where the surrounding stack is already deep and a panic
+/// triggers a second unwind. tokio added an internal version of this
+/// guard in [PR #6826](https://github.com/tokio-rs/tokio/pull/6826),
+/// shipped in tokio 1.40; since we accept tokio >= 1.30, we can't rely
+/// on that and apply the guard at our own boundary. The 512-byte
+/// threshold matches the tokio PR.
+const BOX_FUTURE_THRESHOLD: usize = 512;
+
 /// Run an async future to completion from synchronous code, returning its
 /// output.
 ///
@@ -74,6 +86,15 @@ where
     F: Future + Send,
     F::Output: Send,
 {
+    // Box large futures to keep them off the stack. See `BOX_FUTURE_THRESHOLD`.
+    if size_of::<F>() > BOX_FUTURE_THRESHOLD {
+        block_on_inner(Box::pin(future))
+    } else {
+        block_on_inner(future)
+    }
+}
+
+fn block_on_inner<F: Future>(future: F) -> F::Output {
     GLOBAL_RT.block_on(future)
 }
 
