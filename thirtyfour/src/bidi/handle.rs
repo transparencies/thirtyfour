@@ -11,8 +11,8 @@ use super::BidiEvent;
 use super::capabilities::resolve_bidi_websocket_url;
 use super::command::BidiCommand;
 use super::error::BidiError;
-use super::events::{EventStream, RawEventStream};
 use super::modules;
+use super::stream::{EventStream, RawEventStream};
 use super::transport::ws::BidiTransport;
 use crate::error::WebDriverResult;
 use crate::session::handle::SessionHandle;
@@ -71,22 +71,57 @@ impl BiDi {
         serde_json::from_value(raw).map_err(serde_err)
     }
 
-    /// Send a BiDi command by name with raw JSON params, returning the raw
+    /// Send a BiDi command by name with the given params, returning the raw
     /// `result` value. Useful for one-off commands that aren't in the
     /// curated set under [`crate::bidi::modules`].
-    pub async fn send_raw(&self, method: &str, params: Value) -> Result<Value, BidiError> {
-        self.transport.send_raw(method, params).await
+    ///
+    /// `params` accepts anything `Serialize`. Pass `()` for commands that
+    /// take no parameters — the BiDi spec requires an object so the
+    /// transport coerces `null` to `{}`.
+    pub async fn send_raw<P: serde::Serialize>(
+        &self,
+        method: &str,
+        params: P,
+    ) -> Result<Value, BidiError> {
+        let value = serde_json::to_value(params).map_err(serde_err)?;
+        self.transport.send_raw(method, value).await
     }
 
-    /// Subscribe to a typed event. The driver only delivers events the
-    /// client has explicitly subscribed to via `session.subscribe`; this
-    /// method is just the local stream end. Use [`Self::session`] to send
-    /// the subscription command.
-    pub fn subscribe<E: BidiEvent>(&self) -> EventStream<E> {
-        EventStream::new(self.transport.subscribe_events(), E::METHOD)
+    /// Subscribe to a typed event.
+    ///
+    /// Sends `session.subscribe` for `E::METHOD` on first call (per
+    /// connection) and returns a typed local stream. Subsequent calls
+    /// for the same event share a refcount; `session.unsubscribe` is
+    /// sent automatically when the last stream drops.
+    ///
+    /// For module-wide wildcards (e.g. `"browsingContext"` to receive
+    /// every event in that module) there's no single typed event to
+    /// point at — fall back to [`Self::session`]`.subscribe(...)` and
+    /// [`Self::subscribe_raw`].
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use thirtyfour::prelude::*;
+    /// # use futures_util::StreamExt;
+    /// # async fn run(driver: WebDriver) -> WebDriverResult<()> {
+    /// use thirtyfour::bidi::events::Load;
+    /// let bidi = driver.bidi().await?;
+    /// let mut loads = bidi.subscribe::<Load>().await?;
+    /// while let Some(event) = loads.next().await {
+    ///     println!("loaded: {}", event.url);
+    /// }
+    /// # Ok(()) }
+    /// ```
+    pub async fn subscribe<E: BidiEvent>(&self) -> Result<EventStream<E>, BidiError> {
+        self.transport.ensure_subscribed(E::METHOD).await?;
+        Ok(EventStream::new(self.transport.clone(), self.transport.subscribe_events(), E::METHOD))
     }
 
     /// Subscribe to all events on the BiDi connection as raw `(method, params)`.
+    ///
+    /// You're responsible for sending the matching `session.subscribe`
+    /// commands via [`Self::session`] — this method only returns the
+    /// local stream end and does no wire-level subscription on its own.
     pub fn subscribe_raw(&self) -> RawEventStream {
         RawEventStream::new(self.transport.subscribe_events())
     }

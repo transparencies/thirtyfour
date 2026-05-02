@@ -303,6 +303,7 @@ pub struct RequestWillBeSent {
 }
 impl CdpEvent for RequestWillBeSent {
     const METHOD: &'static str = "Network.requestWillBeSent";
+    const ENABLE: Option<&'static str> = Some("Network.enable");
 }
 
 /// `Network.responseReceived` event.
@@ -322,6 +323,7 @@ pub struct ResponseReceived {
 }
 impl CdpEvent for ResponseReceived {
     const METHOD: &'static str = "Network.responseReceived";
+    const ENABLE: Option<&'static str> = Some("Network.enable");
 }
 
 /// `Network.loadingFinished` event.
@@ -337,6 +339,7 @@ pub struct LoadingFinished {
 }
 impl CdpEvent for LoadingFinished {
     const METHOD: &'static str = "Network.loadingFinished";
+    const ENABLE: Option<&'static str> = Some("Network.enable");
 }
 
 /// `Network.loadingFailed` event.
@@ -356,6 +359,7 @@ pub struct LoadingFailed {
 }
 impl CdpEvent for LoadingFailed {
     const METHOD: &'static str = "Network.loadingFailed";
+    const ENABLE: Option<&'static str> = Some("Network.enable");
 }
 
 /// Domain facade returned by [`Cdp::network`].

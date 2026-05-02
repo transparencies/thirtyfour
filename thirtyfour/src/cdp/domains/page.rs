@@ -266,6 +266,7 @@ pub struct FrameNavigated {
 }
 impl CdpEvent for FrameNavigated {
     const METHOD: &'static str = "Page.frameNavigated";
+    const ENABLE: Option<&'static str> = Some("Page.enable");
 }
 
 /// `Page.lifecycleEvent` event.
@@ -283,6 +284,7 @@ pub struct LifecycleEvent {
 }
 impl CdpEvent for LifecycleEvent {
     const METHOD: &'static str = "Page.lifecycleEvent";
+    const ENABLE: Option<&'static str> = Some("Page.enable");
 }
 
 /// `Page.loadEventFired` event.
@@ -294,6 +296,7 @@ pub struct LoadEventFired {
 }
 impl CdpEvent for LoadEventFired {
     const METHOD: &'static str = "Page.loadEventFired";
+    const ENABLE: Option<&'static str> = Some("Page.enable");
 }
 
 /// Domain facade returned by [`Cdp::page`].

@@ -247,7 +247,7 @@ impl BidiCommand for Disown {
 // ---------------------------------------------------------------------------
 
 /// Events surfaced by the `script.*` module.
-pub mod events {
+pub(crate) mod events {
     use super::*;
 
     /// `script.realmCreated`.

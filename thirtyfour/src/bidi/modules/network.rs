@@ -246,7 +246,7 @@ impl BidiCommand for SetCacheBehavior {
 // ---------------------------------------------------------------------------
 
 /// Events surfaced by the `network.*` module.
-pub mod events {
+pub(crate) mod events {
     use super::*;
 
     /// `network.beforeRequestSent`.
@@ -365,8 +365,11 @@ pub mod events {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestData {
-    /// Request id.
-    pub request: RequestId,
+    /// Request id. The BiDi wire shape names this field `request` — we
+    /// rename it to `id` so the typical access pattern is
+    /// `event.request.id` rather than the awkward `event.request.request`.
+    #[serde(rename = "request")]
+    pub id: RequestId,
     /// HTTP method.
     pub method: String,
     /// Full URL.
@@ -403,6 +406,69 @@ pub struct ResponseData {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+/// RAII guard around an active `network.addIntercept` registration.
+///
+/// Returned by [`NetworkModule::add_intercept`]. Holds the
+/// [`InterceptId`] so you can pass it explicitly to
+/// `bidi.network().remove_intercept(...)` or call [`Self::remove`]
+/// directly. If the guard is dropped without calling `remove`, a
+/// best-effort `network.removeIntercept` is scheduled on the current
+/// tokio runtime (errors are swallowed — this is just a safety net).
+#[derive(Debug)]
+pub struct InterceptGuard {
+    bidi: BiDi,
+    intercept: Option<InterceptId>,
+}
+
+impl InterceptGuard {
+    pub(crate) fn new(bidi: BiDi, intercept: InterceptId) -> Self {
+        Self {
+            bidi,
+            intercept: Some(intercept),
+        }
+    }
+
+    /// The underlying server-assigned intercept id.
+    pub fn id(&self) -> &InterceptId {
+        // Always Some until `remove` is called and consumes the guard.
+        self.intercept.as_ref().expect("InterceptGuard already removed")
+    }
+
+    /// Remove the intercept now, returning any error from the wire call.
+    /// After this, the guard's `Drop` is a no-op.
+    pub async fn remove(mut self) -> Result<(), BidiError> {
+        if let Some(intercept) = self.intercept.take() {
+            self.bidi
+                .send(RemoveIntercept {
+                    intercept,
+                })
+                .await?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for InterceptGuard {
+    fn drop(&mut self) {
+        let Some(intercept) = self.intercept.take() else {
+            return;
+        };
+        // Best-effort: spawn the removal on the current tokio runtime.
+        // If no runtime is current, the intercept stays registered for
+        // the rest of the session.
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let bidi = self.bidi.clone();
+            handle.spawn(async move {
+                let _ = bidi
+                    .send(RemoveIntercept {
+                        intercept,
+                    })
+                    .await;
+            });
+        }
+    }
+}
+
 /// Module facade returned by [`BiDi::network`].
 #[derive(Debug)]
 pub struct NetworkModule<'a> {
@@ -416,19 +482,26 @@ impl<'a> NetworkModule<'a> {
         }
     }
 
-    /// `network.addIntercept`.
+    /// `network.addIntercept` — register an intercept and return an
+    /// [`InterceptGuard`].
+    ///
+    /// Call [`InterceptGuard::remove`] when you're done. Letting the guard
+    /// drop also schedules a best-effort `network.removeIntercept` on the
+    /// current tokio runtime (errors are swallowed).
     pub async fn add_intercept(
         &self,
         phases: Vec<InterceptPhase>,
         url_patterns: Option<Vec<serde_json::Value>>,
-    ) -> Result<AddInterceptResult, BidiError> {
-        self.bidi
+    ) -> Result<InterceptGuard, BidiError> {
+        let result = self
+            .bidi
             .send(AddIntercept {
                 phases,
                 contexts: vec![],
                 url_patterns,
             })
-            .await
+            .await?;
+        Ok(InterceptGuard::new(self.bidi.clone(), result.intercept))
     }
 
     /// `network.removeIntercept`.

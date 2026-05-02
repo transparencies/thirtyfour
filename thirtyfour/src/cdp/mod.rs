@@ -40,6 +40,9 @@
 
 pub mod domains;
 
+#[cfg(feature = "cdp-events")]
+pub mod events;
+
 mod command;
 mod error;
 mod handle;
@@ -49,9 +52,9 @@ mod transport;
 #[cfg(feature = "cdp-events")]
 mod capabilities;
 #[cfg(feature = "cdp-events")]
-mod events;
-#[cfg(feature = "cdp-events")]
 mod session;
+#[cfg(feature = "cdp-events")]
+mod stream;
 
 pub use command::{CdpCommand, CdpEvent, Empty, RawEvent};
 pub use error::CdpError;
@@ -62,6 +65,6 @@ pub use ids::{
 };
 
 #[cfg(feature = "cdp-events")]
-pub use events::EventStream;
-#[cfg(feature = "cdp-events")]
 pub use session::CdpSession;
+#[cfg(feature = "cdp-events")]
+pub use stream::EventStream;

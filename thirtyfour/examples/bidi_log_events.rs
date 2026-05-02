@@ -7,8 +7,8 @@
 //! entry with its severity, source realm, and text.
 
 use futures_util::StreamExt;
+use thirtyfour::bidi::events::LogEntryAdded;
 use thirtyfour::bidi::modules::log::LogLevel;
-use thirtyfour::bidi::modules::log::events::EntryAdded;
 use thirtyfour::prelude::*;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -22,11 +22,10 @@ async fn main() -> WebDriverResult<()> {
     let driver = WebDriver::managed(caps).await?;
     let bidi = driver.bidi().await?;
 
-    bidi.session().subscribe("log.entryAdded").await?;
-    let mut events = bidi.subscribe::<EntryAdded>();
+    // Auto-subscribes to `log.entryAdded`.
+    let mut events = bidi.subscribe::<LogEntryAdded>().await?;
 
-    let tree = bidi.browsing_context().get_tree(None).await?;
-    let context = tree.contexts[0].context.clone();
+    let context = bidi.browsing_context().top_level().await?;
 
     let page = "data:text/html,<html><body><script>\
         console.log('hello from log');\

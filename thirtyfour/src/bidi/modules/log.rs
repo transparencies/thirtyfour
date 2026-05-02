@@ -22,7 +22,7 @@ string_enum! {
 }
 
 /// Events surfaced by the `log.*` module.
-pub mod events {
+pub(crate) mod events {
     use super::*;
 
     /// `log.entryAdded`. Modeled as a JSON-flexible struct since the spec

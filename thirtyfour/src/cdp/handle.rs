@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 
+use serde::Serialize;
 use serde_json::Value;
 
 use super::command::CdpCommand;
@@ -72,11 +73,30 @@ impl Cdp {
         Ok(serde_json::from_value(raw)?)
     }
 
-    /// Send a CDP command by name with raw JSON params, returning the raw
+    /// Send a CDP command by name with the given params, returning the raw
     /// `result` value. Useful for one-off commands that aren't in the
     /// curated set under [`crate::cdp::domains`].
-    pub async fn send_raw(&self, method: &str, params: Value) -> WebDriverResult<Value> {
-        self.transport.send_raw(method, params).await
+    ///
+    /// `params` accepts anything `Serialize`. Pass `()` (or
+    /// `serde_json::json!({})`) for commands that take no parameters —
+    /// CDP rejects `"params": null` so the transport coerces both to `{}`.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use thirtyfour::prelude::*;
+    /// # async fn run(driver: WebDriver) -> WebDriverResult<()> {
+    /// // No-arg command:
+    /// let info = driver.cdp().send_raw("Browser.getVersion", ()).await?;
+    /// // With params:
+    /// driver.cdp().send_raw(
+    ///     "Page.navigate",
+    ///     serde_json::json!({ "url": "https://example.com" }),
+    /// ).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn send_raw<P: Serialize>(&self, method: &str, params: P) -> WebDriverResult<Value> {
+        let value = serde_json::to_value(params)?;
+        self.transport.send_raw(method, value).await
     }
 
     /// Open a WebSocket-backed CDP session for this driver session.

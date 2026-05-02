@@ -52,6 +52,17 @@ impl fmt::Display for CdpError {
     }
 }
 
+impl From<CdpError> for crate::error::WebDriverError {
+    fn from(e: CdpError) -> Self {
+        // Render CdpError as a `FatalError` string for parity with how
+        // BidiError is converted — these protocol errors don't map cleanly
+        // onto the W3C HTTP error shape. Callers who want the typed CDP
+        // code/message should keep `Result<_, CdpError>` instead of `?`-ing
+        // through `WebDriverResult`.
+        crate::error::WebDriverError::FatalError(e.to_string())
+    }
+}
+
 /// Wire shape of a JSON-RPC error envelope, used by the WebSocket transport
 /// when parsing responses, and by the unit tests.
 #[derive(Debug, Clone, Deserialize)]

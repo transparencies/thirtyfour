@@ -18,7 +18,11 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use thirtyfour::bidi::modules::{browsing_context, log, network, script};
+use thirtyfour::bidi::events::{
+    BeforeRequestSent, ContextCreated, ContextDestroyed, DomContentLoaded, Load, LogEntryAdded,
+    NavigationStarted, RealmCreated, ResponseCompleted, ResponseStarted,
+};
+use thirtyfour::bidi::modules::{browsing_context, log, network};
 use thirtyfour::prelude::*;
 
 use crate::common::launch_managed_bidi;
@@ -86,11 +90,10 @@ async fn browsing_context_load_event_after_navigate() -> WebDriverResult<()> {
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("browsingContext.load").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<browsing_context::events::Load>();
+        // Typed `subscribe` auto-sends `session.subscribe`.
+        let mut events = bidi.subscribe::<Load>().await.map_err(bidi_to_wd)?;
 
-        let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
-        let ctx = tree.contexts[0].context.clone();
+        let ctx = bidi.browsing_context().top_level().await.map_err(bidi_to_wd)?;
         let url = "data:text/html,<html><body>load</body></html>";
         bidi.browsing_context().navigate(ctx.clone(), url, None).await.map_err(bidi_to_wd)?;
         let evt = wait_for(&mut events, |e| e.context == ctx).await;
@@ -106,8 +109,7 @@ async fn browsing_context_dom_content_loaded_event_after_navigate() -> WebDriver
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("browsingContext.domContentLoaded").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<browsing_context::events::DomContentLoaded>();
+        let mut events = bidi.subscribe::<DomContentLoaded>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let ctx = tree.contexts[0].context.clone();
         let url = "data:text/html,<html><body>dcl</body></html>";
@@ -124,8 +126,7 @@ async fn browsing_context_navigation_started_event_after_navigate() -> WebDriver
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("browsingContext.navigationStarted").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<browsing_context::events::NavigationStarted>();
+        let mut events = bidi.subscribe::<NavigationStarted>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let ctx = tree.contexts[0].context.clone();
         let url = "data:text/html,<html><body>nav</body></html>";
@@ -147,8 +148,7 @@ async fn browsing_context_context_created_event_for_iframe() -> WebDriverResult<
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("browsingContext.contextCreated").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<browsing_context::events::ContextCreated>();
+        let mut events = bidi.subscribe::<ContextCreated>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let parent = tree.contexts[0].context.clone();
         let url =
@@ -169,8 +169,7 @@ async fn browsing_context_context_destroyed_event_after_close() -> WebDriverResu
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("browsingContext.contextDestroyed").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<browsing_context::events::ContextDestroyed>();
+        let mut events = bidi.subscribe::<ContextDestroyed>().await.map_err(bidi_to_wd)?;
         let created = bidi
             .browsing_context()
             .create(browsing_context::CreateType::Tab)
@@ -194,8 +193,7 @@ async fn log_entry_added_for_console_log() -> WebDriverResult<()> {
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("log.entryAdded").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<log::events::EntryAdded>();
+        let mut events = bidi.subscribe::<LogEntryAdded>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let ctx = tree.contexts[0].context.clone();
         bidi.browsing_context()
@@ -231,8 +229,7 @@ async fn script_realm_created_after_navigate() -> WebDriverResult<()> {
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("script.realmCreated").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<script::events::RealmCreated>();
+        let mut events = bidi.subscribe::<RealmCreated>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let ctx = tree.contexts[0].context.clone();
         bidi.browsing_context()
@@ -260,8 +257,7 @@ async fn network_before_request_sent_event_during_navigate() -> WebDriverResult<
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("network.beforeRequestSent").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<network::events::BeforeRequestSent>();
+        let mut events = bidi.subscribe::<BeforeRequestSent>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let ctx = tree.contexts[0].context.clone();
         let server = spawn_local_http("ok").await?;
@@ -281,8 +277,7 @@ async fn network_response_completed_event_during_navigate() -> WebDriverResult<(
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("network.responseCompleted").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<network::events::ResponseCompleted>();
+        let mut events = bidi.subscribe::<ResponseCompleted>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let ctx = tree.contexts[0].context.clone();
         let server = spawn_local_http("hello world").await?;
@@ -302,8 +297,7 @@ async fn network_response_started_event_during_navigate() -> WebDriverResult<()>
     with_timeout(async {
         let driver = launch_managed_bidi().await?;
         let bidi = driver.bidi().await?;
-        bidi.session().subscribe("network.responseStarted").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<network::events::ResponseStarted>();
+        let mut events = bidi.subscribe::<ResponseStarted>().await.map_err(bidi_to_wd)?;
         let tree = bidi.browsing_context().get_tree(None).await.map_err(bidi_to_wd)?;
         let ctx = tree.contexts[0].context.clone();
         let server = spawn_local_http("started").await?;
@@ -326,8 +320,7 @@ async fn network_intercept_continue_request_unmodified() -> WebDriverResult<()> 
         let server = spawn_local_http("intercepted").await?;
 
         // 1. Subscribe to events first so we don't miss them.
-        bidi.session().subscribe("network.beforeRequestSent").await.map_err(bidi_to_wd)?;
-        let mut events = bidi.subscribe::<network::events::BeforeRequestSent>();
+        let mut events = bidi.subscribe::<BeforeRequestSent>().await.map_err(bidi_to_wd)?;
 
         // 2. Add a global intercept on the request phase.
         let added = bidi
@@ -355,15 +348,15 @@ async fn network_intercept_continue_request_unmodified() -> WebDriverResult<()> 
         // 4. Find the matching event, then continue the request.
         let evt =
             wait_for(&mut events, |e| e.request.url.starts_with(&server) && e.is_blocked).await;
-        bidi.network().continue_request(evt.request.request.clone()).await.map_err(bidi_to_wd)?;
+        bidi.network().continue_request(evt.request.id.clone()).await.map_err(bidi_to_wd)?;
 
         nav_handle
             .await
             .map_err(|e| WebDriverError::FatalError(format!("nav join: {e}")))?
             .map_err(bidi_to_wd)?;
 
-        // 5. Cleanup.
-        bidi.network().remove_intercept(added.intercept).await.map_err(bidi_to_wd)?;
+        // 5. Cleanup — remove the intercept explicitly via the guard.
+        added.remove().await.map_err(bidi_to_wd)?;
         driver.quit().await
     })
     .await

@@ -12,6 +12,12 @@
 - [Waiting For Element Changes](./features/waiting.md)
 - [Components](./features/components.md)
 - [WebDriver Manager](./features/manager.md)
+# Chrome DevTools Protocol
+- [Overview](./cdp/overview.md)
+- [CDP Events](./cdp/events.md)
+# WebDriver BiDi
+- [Overview](./bidi/overview.md)
+- [BiDi Events](./bidi/events.md)
 # Useful Tools
 - [Selenium](./tools/selenium.md)
 # Contributing

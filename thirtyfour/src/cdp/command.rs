@@ -43,10 +43,25 @@ pub trait CdpCommand: Serialize {
 
 /// A typed CDP event delivered over a [`CdpSession`].
 ///
+/// CDP events only fire after the owning domain is enabled
+/// (`Network.enable`, `Page.enable`, `Runtime.enable`, …). Implementors
+/// should set [`Self::ENABLE`] to the wire method name of the relevant
+/// `*.enable` command so that
+/// [`CdpSession::subscribe`](crate::cdp::CdpSession::subscribe) can call
+/// it idempotently the first time the domain is needed in a session.
+/// Set to `None` for events whose domain has no `enable` command (e.g.
+/// `Target.attachedToTarget` — the user must call
+/// `Target.setDiscoverTargets` themselves).
+///
 /// [`CdpSession`]: crate::cdp::CdpSession
 pub trait CdpEvent: DeserializeOwned + Clone + Send + Sync + 'static {
     /// Wire name of the event (e.g. `"Network.requestWillBeSent"`).
     const METHOD: &'static str;
+
+    /// CDP method to call once per session before this event fires.
+    /// `None` means no enable is needed (or the domain doesn't have a
+    /// generic enable). Sent with empty params.
+    const ENABLE: Option<&'static str> = None;
 }
 
 /// Marker type for CDP commands whose response body is `{}`.

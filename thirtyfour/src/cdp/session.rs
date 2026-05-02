@@ -18,16 +18,18 @@
 //!
 //! See module-level docs at [`crate::cdp`] for the protocol overview.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde_json::Value;
+use tokio::sync::Mutex;
 
 use super::CdpCommand;
 use super::SessionId;
 use super::capabilities::resolve_cdp_websocket_url;
 use super::command::RawEvent;
 use super::error::CdpError;
-use super::events::{EventStream, RawEventStream};
+use super::stream::{EventStream, RawEventStream};
 use super::transport::ws::WsTransport;
 use crate::cdp::CdpEvent;
 use crate::cdp::domains::target::{
@@ -44,6 +46,11 @@ use crate::session::handle::SessionHandle;
 pub struct CdpSession {
     transport: WsTransport,
     session_id: Option<SessionId>,
+    /// CDP domain `*.enable` methods we've already sent on this session,
+    /// shared across clones so [`CdpSession::subscribe`] doesn't re-enable
+    /// a domain that's already been enabled. Held in `Arc` so that a
+    /// `clone()` of a `CdpSession` shares the same set.
+    enabled: Arc<Mutex<HashSet<&'static str>>>,
 }
 
 impl CdpSession {
@@ -84,6 +91,7 @@ impl CdpSession {
         Ok(Self {
             transport,
             session_id: Some(attached.session_id),
+            enabled: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
@@ -100,13 +108,52 @@ impl CdpSession {
     }
 
     /// Send a raw command, scoped to this session.
-    pub async fn send_raw(&self, method: &str, params: Value) -> Result<Value, CdpError> {
-        self.transport.send_raw_sessioned(method, params, self.session_id.as_ref()).await
+    ///
+    /// `params` accepts anything `Serialize`. Pass `()` for no-arg commands.
+    pub async fn send_raw<P: serde::Serialize>(
+        &self,
+        method: &str,
+        params: P,
+    ) -> Result<Value, CdpError> {
+        let value = serde_json::to_value(params).map_err(serde_err)?;
+        self.transport.send_raw_sessioned(method, value, self.session_id.as_ref()).await
     }
 
     /// Subscribe to a typed event for this session.
-    pub fn subscribe<E: CdpEvent>(&self) -> EventStream<E> {
-        EventStream::new(self.transport.subscribe_events(), self.session_id.clone(), E::METHOD)
+    ///
+    /// Idempotently sends the event's domain-enable command (e.g.
+    /// `Network.enable`, `Page.enable`, `Runtime.enable`) the first time
+    /// any subscriber for that domain calls this method on this session.
+    /// Events whose domain has no generic enable (`Target.*`, `Fetch.*`)
+    /// declare `ENABLE = None`; the user must enable them manually.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use thirtyfour::prelude::*;
+    /// # use futures_util::StreamExt;
+    /// # async fn run(driver: WebDriver) -> WebDriverResult<()> {
+    /// use thirtyfour::cdp::events::RequestWillBeSent;
+    /// let session = driver.cdp().connect().await?;
+    /// // No need for `session.send(network::Enable::default()).await` —
+    /// // it's sent automatically the first time we ask for a Network event.
+    /// let mut requests = session.subscribe::<RequestWillBeSent>().await?;
+    /// while let Some(e) = requests.next().await {
+    ///     println!("{}", e.document_url);
+    /// }
+    /// # Ok(()) }
+    /// ```
+    pub async fn subscribe<E: CdpEvent>(&self) -> Result<EventStream<E>, CdpError> {
+        if let Some(enable_method) = E::ENABLE {
+            let mut enabled = self.enabled.lock().await;
+            if !enabled.contains(enable_method) {
+                // Hold the lock across the wire call so concurrent
+                // subscribers wait for the in-flight enable to ack
+                // instead of double-enabling.
+                self.send_raw(enable_method, serde_json::json!({})).await?;
+                enabled.insert(enable_method);
+            }
+        }
+        Ok(EventStream::new(self.transport.subscribe_events(), self.session_id.clone(), E::METHOD))
     }
 
     /// Subscribe to all events for this session as raw `(method, params)` pairs.
