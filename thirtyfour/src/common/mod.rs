@@ -14,7 +14,6 @@ pub mod keys;
 pub mod log;
 /// Types used with print commands.
 pub mod print;
-/// Shared building blocks used by the CDP and BiDi protocol layers.
 #[cfg(any(feature = "cdp", feature = "bidi"))]
 pub(crate) mod protocol;
 /// Type for request method and body.

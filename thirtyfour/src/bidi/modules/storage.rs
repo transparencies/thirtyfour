@@ -1,13 +1,7 @@
 //! `storage.*` BiDi module — cookies and storage partitions.
 //!
-//! Cookies use the crate-wide [`Cookie`] and [`SameSite`] types from
-//! [`crate::cookie`], so callers don't have to learn a second cookie
-//! shape. The BiDi wire format (lowercase `sameSite`,
-//! `network.BytesValue`-wrapped values) is handled internally via the
-//! serde adapters in `crate::common::cookie::bidi`.
-//!
-//! [`Cookie`]: crate::Cookie
-//! [`SameSite`]: crate::SameSite
+//! Cookies use the crate-wide [`Cookie`](crate::Cookie) and
+//! [`SameSite`](crate::SameSite) types.
 
 use serde::{Deserialize, Serialize};
 
@@ -18,29 +12,16 @@ use crate::bidi::command::BidiCommand;
 use crate::bidi::error::BidiError;
 use crate::common::cookie::bidi::{bytes_string, same_site, string_from_bytes_value};
 
-/// Cookie partition descriptor.
-///
-/// `storage.PartitionDescriptor` is opaque addressing for a storage
-/// partition. Use `serde_json::json!` to construct, e.g.
+/// `storage.PartitionDescriptor` — opaque addressing for a storage
+/// partition. Construct with `serde_json::json!`, e.g.
 /// `json!({"type":"context","context": id})` or
 /// `json!({"type":"storageKey","userContext":"default","sourceOrigin":"https://x"})`.
 pub type PartitionDescriptor = serde_json::Value;
 
-// ---------------------------------------------------------------------------
-// Wire-shape representations of cookies on the BiDi side.
-//
-// Public callers see `common::cookie::Cookie`; we marshal into/out of these
-// internal structs so the serde adapters can do their lowercase-sameSite /
-// BytesValue work without leaking onto the user-facing type.
-// ---------------------------------------------------------------------------
-
-/// Wire shape of a `storage.Cookie` returned by `storage.getCookies`.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WireCookie {
     name: String,
-    /// `network.BytesValue` — `{"type":"string","value":"…"}` or
-    /// `{"type":"base64","value":"…"}`.
     value: serde_json::Value,
     domain: String,
     path: String,
@@ -49,7 +30,7 @@ struct WireCookie {
     #[serde(with = "same_site")]
     same_site: SameSite,
     #[serde(default)]
-    #[allow(dead_code)] // surfaced only on the wire; not on `common::Cookie`.
+    #[allow(dead_code)] // BiDi-only field; not surfaced on `Cookie`.
     size: Option<u32>,
     #[serde(default)]
     expiry: Option<i64>,
@@ -70,7 +51,6 @@ impl From<WireCookie> for Cookie {
     }
 }
 
-/// Wire shape of `storage.PartialCookie` sent to `storage.setCookie`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WirePartialCookie {
@@ -150,10 +130,6 @@ impl CookieFilter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Commands
-// ---------------------------------------------------------------------------
-
 /// `storage.getCookies`.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct GetCookies {
@@ -170,10 +146,9 @@ impl BidiCommand for GetCookies {
     type Returns = WireGetCookiesResult;
 }
 
-/// Wire-shape response for [`GetCookies`]. Internal — the public API
-/// returns [`GetCookiesResult`] with cookies normalised to [`Cookie`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[doc(hidden)]
 pub struct WireGetCookiesResult {
     cookies: Vec<WireCookie>,
     #[serde(default)]
@@ -183,9 +158,7 @@ pub struct WireGetCookiesResult {
 /// Response for [`StorageModule::get_cookies`].
 #[derive(Debug, Clone)]
 pub struct GetCookiesResult {
-    /// Matching cookies, normalised to [`Cookie`] (BiDi-only fields like
-    /// `size` are dropped — the response struct surfaces only what fits
-    /// the unified shape).
+    /// Matching cookies.
     pub cookies: Vec<Cookie>,
     /// Resolved partition key (driver-defined shape).
     pub partition_key: serde_json::Value,
@@ -200,7 +173,6 @@ impl From<WireGetCookiesResult> for GetCookiesResult {
     }
 }
 
-/// `storage.setCookie`.
 #[derive(Debug, Clone, Serialize)]
 struct SetCookie {
     cookie: WirePartialCookie,
@@ -290,8 +262,8 @@ impl<'a> StorageModule<'a> {
 
     /// `storage.setCookie`.
     ///
-    /// BiDi requires the cookie's `domain` to be set. If `cookie.domain` is
-    /// `None`, this returns an error without making a network call.
+    /// `cookie.domain` is required by BiDi; an empty `domain` returns
+    /// `invalid argument` without making a network call.
     pub async fn set_cookie(&self, cookie: Cookie) -> Result<SetCookieResult, BidiError> {
         let cookie = WirePartialCookie::from_cookie(cookie)?;
         self.bidi

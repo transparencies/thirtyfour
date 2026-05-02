@@ -1,12 +1,9 @@
 //! Newtypes for opaque CDP identifiers.
 //!
-//! CDP uses many string and integer ids that are easy to mix up at the call
-//! site (a `FrameId` is not a `TargetId`, a `NodeId` is not a `BackendNodeId`).
-//! These newtypes preserve the wire format while keeping them distinct in
-//! Rust.
-//!
-//! The `string_id!` and `int_id!` macros live in
-//! [`crate::common::protocol`] and are shared with the BiDi layer.
+//! CDP uses a number of string and integer ids that are easy to mix up at
+//! the call site (`FrameId` vs `TargetId`, `NodeId` vs `BackendNodeId`,
+//! …). These newtypes preserve the wire format while staying distinct
+//! in Rust.
 
 use crate::common::protocol::{int_id, string_id};
 
@@ -91,11 +88,6 @@ int_id! {
     Timestamp(i64)
 }
 
-// Wire-shape coverage for these IDs lives in the integration tests in
+// Wire-shape coverage for these ids lives in the integration tests in
 // `thirtyfour/tests/cdp_typed.rs` — every command that returns or accepts
-// an ID round-trips through real chromedriver, which is the only check
-// that actually proves the transparent serde shape against CDP.
-//
-// The compile-time invariant that distinct IDs (e.g. `FrameId` vs
-// `RequestId`, `NodeId` vs `BackendNodeId`) are separate Rust types is
-// enforced by the type system itself — no runtime assertion needed.
+// an id round-trips through real chromedriver.

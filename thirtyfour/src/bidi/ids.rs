@@ -1,11 +1,8 @@
 //! Newtypes for opaque BiDi identifiers.
 //!
-//! The spec uses a handful of distinct string-shaped ids that are easy to
-//! mix up. These newtypes preserve the wire format (`#[serde(transparent)]`)
-//! while keeping them distinct in Rust.
-//!
-//! The `string_id!` macro lives in [`crate::common::protocol`] and is
-//! shared with the CDP layer.
+//! The spec uses a handful of distinct string-shaped ids that are easy
+//! to mix up. These newtypes preserve the wire format
+//! (`#[serde(transparent)]`) while staying distinct in Rust.
 
 use crate::common::protocol::string_id;
 

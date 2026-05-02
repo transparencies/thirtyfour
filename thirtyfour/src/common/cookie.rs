@@ -1,48 +1,26 @@
-//! Unified `Cookie` and `SameSite` types used by both the W3C WebDriver
-//! classic API and the BiDi `storage.*` module.
-//!
-//! ## Wire-shape differences
-//!
-//! The two protocols spell cookies slightly differently:
-//!
-//! - W3C classic emits `sameSite` as PascalCase (`Strict`, `Lax`, `None`)
-//!   and the cookie value as a plain string.
-//! - BiDi emits `sameSite` as lowercase (`strict`, `lax`, `none`,
-//!   `default`) and the cookie value as a `network.BytesValue` wrapper
-//!   (`{"type":"string","value":"…"}`).
-//!
-//! `Cookie` is the user-facing type and uses the W3C classic wire shape
-//! by default. The BiDi storage module re-uses the same struct in its
-//! public API and converts to/from its wire shape internally via the
-//! crate-private serde adapters at the bottom of this file.
+//! Cookie and SameSite types.
 
 use serde::{Deserialize, Serialize};
 
 /// The `sameSite` attribute of a cookie.
-///
-/// W3C WebDriver classic only defines [`SameSite::Strict`], [`SameSite::Lax`],
-/// and [`SameSite::None`]. BiDi adds [`SameSite::Default`] for "let the
-/// browser pick" semantics. The default `Serialize`/`Deserialize` impl uses
-/// the W3C classic spelling (PascalCase); the BiDi module uses a
-/// crate-private adapter for the lowercase spelling.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SameSite {
-    /// Strict — only same-site requests carry the cookie.
+    /// Only same-site requests carry the cookie.
     Strict,
-    /// Lax — top-level navigations also carry the cookie.
+    /// Top-level navigations also carry the cookie.
     Lax,
-    /// None — must be combined with `secure: true`.
+    /// No SameSite restriction. Must be combined with `secure: true`.
     None,
-    /// BiDi-only — let the driver pick the policy.
+    /// Let the driver pick the policy. BiDi only.
     Default,
 }
 
 /// A browser cookie.
 ///
-/// Used both by `WebDriver::add_cookie` / `get_cookies` (W3C classic) and
-/// by the BiDi `storage.*` module. Optional fields default to
-/// driver-defined behavior; absent fields are skipped on serialization so
-/// an empty `Cookie` reads as a name+value pair on either protocol.
+/// Used by `WebDriver::add_cookie` / `WebDriver::get_cookies` and by the
+/// BiDi `storage.*` module. Unset optional fields are skipped on
+/// serialization, so a freshly constructed `Cookie::new` is just a
+/// name + value on the wire.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cookie {
     /// The name of the cookie.
@@ -115,27 +93,24 @@ impl Cookie {
     }
 }
 
-/// Serde adapters used by the BiDi `storage.*` module to massage the
-/// shared [`Cookie`] / [`SameSite`] types into BiDi's wire shape.
+// Serde adapters that translate `Cookie` / `SameSite` to and from
+// BiDi's wire shape (lowercase `sameSite`, value wrapped in a
+// `network.BytesValue`).
 #[cfg(feature = "bidi")]
 pub(crate) mod bidi {
-    /// Wrap a plain string as a BiDi `network.BytesValue` JSON object
-    /// (`{"type":"string","value":"…"}`).
+    /// Wrap a string as a BiDi `network.BytesValue` JSON object.
     pub(crate) fn bytes_string(value: impl Into<String>) -> serde_json::Value {
         serde_json::json!({"type": "string", "value": value.into()})
     }
 
-    /// Extract a plain string from a BiDi `network.BytesValue`. For binary
-    /// (base64) or unknown types the encoded form is returned so callers
-    /// don't silently get an empty string; the original JSON is still on
-    /// the response struct for clients that need to handle it specially.
+    /// Extract the encoded string from a BiDi `network.BytesValue`.
+    /// Base64-typed values are returned as their encoded form rather
+    /// than decoded.
     pub(crate) fn string_from_bytes_value(v: &serde_json::Value) -> String {
         v.get("value").and_then(|s| s.as_str()).unwrap_or_default().to_string()
     }
 
-    /// `serde(with = "...")` adapter that emits and accepts the BiDi
-    /// lowercase spelling for [`super::SameSite`]. Drop-in replacement for
-    /// the default PascalCase serde impl on the BiDi-side wire structs.
+    /// `serde(with = "...")` adapter for BiDi's lowercase `sameSite`.
     pub(crate) mod same_site {
         use super::super::SameSite;
         use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -170,14 +145,8 @@ pub(crate) mod bidi {
             }
         }
 
-        /// Same as the module-level (de)serializers but lifted to
-        /// `Option<SameSite>` so the BiDi structs that have an optional
-        /// `sameSite` field can use `serde(with = "...::option")`.
-        ///
-        /// `deserialize` is currently only used by the BiDi `CookieFilter`
-        /// path; if no caller ever round-trips an optional sameSite filter
-        /// through deserialise, dead-code analysis can flag it. Allow it.
-        #[allow(dead_code)]
+        /// `Option<SameSite>` variant for fields that skip when unset.
+        #[allow(dead_code)] // `deserialize` may be unused depending on call sites.
         pub(crate) mod option {
             use super::SameSite;
             use serde::{Deserialize, Deserializer, Serializer};

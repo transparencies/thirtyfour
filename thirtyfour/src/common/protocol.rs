@@ -1,31 +1,18 @@
-//! Internal building blocks used by the CDP and BiDi layers.
-//!
-//! Both protocols are JSON-RPC-shaped, so the same handful of macros end
-//! up useful in both places:
+//! Macros shared by the CDP and BiDi protocol layers:
 //!
 //! - `string_enum!` — closed-set enums with a forward-compat
 //!   `Unknown(String)` variant.
 //! - `string_id!` / `int_id!` — `#[serde(transparent)]` newtypes for
-//!   opaque ids that look identical on the wire but mustn't be mixed up
+//!   opaque ids that look identical on the wire but should stay distinct
 //!   in Rust.
-//!
-//! These used to live in duplicate copies under `cdp::macros` /
-//! `cdp::ids` and `bidi::macros` / `bidi::ids`. They're shared from here
-//! now via crate-private `pub(crate) use`. Public types each protocol
-//! exposes (its own `CdpCommand` / `BidiCommand`, `Empty`, ids, …)
-//! continue to live in the protocol module so user-facing import paths
-//! stay protocol-local.
 
 /// Define a closed-set string enum with a forward-compat `Unknown(String)`
-/// escape hatch.
+/// variant.
 ///
-/// Generates the enum, plus `as_str`, `Display`, `Serialize`, `Deserialize`,
-/// and the standard derives. Wire values are spelled out per variant so the
-/// macro works for PascalCase (`Failed`, `TimedOut`), camelCase
-/// (`beforeRequestSent`), lowercase (`cellular2g`), and dotted
-/// (`network.beforeRequestSent`) values without per-variant serde renames.
-///
-/// # Example
+/// Generates the enum plus `as_str`, `Display`, `Serialize`, `Deserialize`,
+/// and the standard derives. Wire values are spelled per variant, so the
+/// macro covers PascalCase, camelCase, lowercase, and dotted values
+/// without per-variant serde renames.
 ///
 /// ```ignore
 /// string_enum! {
@@ -37,11 +24,8 @@
 /// }
 /// ```
 ///
-/// Deserialising a value that doesn't match any known variant yields
-/// `Unknown(<that string>)` — preserves forwards-compatibility when newer
-/// browsers / drivers add values not yet known to this crate. Serialising
-/// `Unknown(s)` writes `s` back to the wire unchanged, so the typed enum
-/// can be used as both an outgoing param and an incoming response.
+/// Unknown wire values deserialise to `Unknown(<that string>)` and
+/// re-serialise unchanged, so newer driver values still round-trip.
 macro_rules! string_enum {
     (
         $(#[$meta:meta])*
@@ -105,10 +89,8 @@ macro_rules! string_enum {
     };
 }
 
-/// Define a `#[serde(transparent)]` string newtype with the standard
-/// `new`/`as_str`/`From`/`Display` accessors. Used for opaque ids that look
-/// identical on the wire (a `FrameId`, `RequestId`, `BrowsingContextId`, …
-/// are all just strings) but must stay distinct in Rust.
+/// Define a `#[serde(transparent)]` string newtype with `new`, `as_str`,
+/// `From`, and `Display` accessors.
 macro_rules! string_id {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
@@ -148,10 +130,8 @@ macro_rules! string_id {
     };
 }
 
-/// Define a `#[serde(transparent)]` integer newtype with the standard
-/// `new`/`get`/`From`/`Display` accessors. Used for opaque numeric ids
-/// (CDP `NodeId`, `BackendNodeId`, `ExecutionContextId`, …) that need to
-/// stay distinct in Rust without changing their wire shape.
+/// Define a `#[serde(transparent)]` integer newtype with `new`, `get`,
+/// `From`, and `Display` accessors.
 #[cfg_attr(not(feature = "cdp"), allow(unused_macros))]
 macro_rules! int_id {
     ($(#[$meta:meta])* $name:ident($repr:ty)) => {
@@ -188,10 +168,8 @@ macro_rules! int_id {
     };
 }
 
-// `int_id!` is currently only used by the CDP layer, but it lives here so
-// the BiDi layer can pick it up if it ever needs an integer-typed id (and
-// so all the protocol-helper macros stay in one place). Squash the
-// unused-macro warning when `cdp` is off.
+// `int_id!` is only used by CDP today; allow it to be unused when the
+// `cdp` feature is off so the BiDi-only build stays warning-free.
 #[cfg_attr(not(feature = "cdp"), allow(unused_imports))]
 pub(crate) use int_id;
 pub(crate) use string_enum;
