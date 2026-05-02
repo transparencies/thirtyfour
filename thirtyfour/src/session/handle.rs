@@ -1209,10 +1209,9 @@ impl Drop for SessionHandle {
             return;
         }
 
-        #[cfg(feature = "debug_sync_quit")]
-        eprintln!(
-            "WebDriver didn't wasn't quit properly at\n{}",
-            std::backtrace::Backtrace::capture()
+        tracing::warn!(
+            "WebDriver was not quit properly — falling back to synchronous teardown, \
+             which blocks the async executor. Call `WebDriver::quit().await` instead."
         );
 
         struct SessionDropGuard(SessionHandle);
@@ -1257,12 +1256,25 @@ impl Drop for SessionHandle {
             driver_guard: None,
         });
 
-        support::spawn_blocked_future(|spawned| async move {
-            if spawned {
-                // Old I/O drivers may be destroyed at this point
+        // Run the DELETE /session call on `support::GLOBAL_RT` from a dedicated
+        // OS thread, joined synchronously so Drop blocks until cleanup finishes.
+        // The new thread escapes any user tokio runtime context (since
+        // `support::block_on` uses `Handle::block_on`, which panics from inside
+        // another runtime). We also rebuild the HttpClient because its IO
+        // drivers were tied to the user's runtime — the future polls on
+        // `GLOBAL_RT`, so the client needs fresh drivers there.
+        let _ = std::thread::spawn(move || {
+            support::block_on(async move {
                 this.client = this.client.new().await;
-            }
-            let _ = this.quit().await;
-        });
+                if let Err(err) = this.quit().await {
+                    tracing::warn!(
+                        %err,
+                        "WebDriver sync-Drop cleanup failed; the session may leak \
+                         until the driver times it out"
+                    );
+                }
+            });
+        })
+        .join();
     }
 }
