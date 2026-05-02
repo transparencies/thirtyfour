@@ -3,10 +3,33 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use std::convert::Infallible;
 use std::future::Future;
 use std::io;
+use std::panic::AssertUnwindSafe;
 use std::path::Path;
 use std::sync::LazyLock;
 use std::thread;
 use std::time::Duration;
+
+/// Run `f`; if it panics, abort the process. Used to make the
+/// [`GLOBAL_RT`] init and driver-thread paths fail loud rather than
+/// silently poisoning the LazyLock (init) or hanging future
+/// `block_on` calls (driver). The `Abort` drop-guard ensures the
+/// abort runs even via unwind paths.
+fn no_unwind<T>(f: impl FnOnce() -> T) -> T {
+    let res = std::panic::catch_unwind(AssertUnwindSafe(f));
+
+    res.unwrap_or_else(|_| {
+        struct Abort;
+        impl Drop for Abort {
+            fn drop(&mut self) {
+                eprintln!("unrecoverable error reached aborting...");
+                std::process::abort()
+            }
+        }
+
+        let _abort_on_unwind = Abort;
+        unreachable!("thirtyfour global runtime panicked")
+    })
+}
 
 /// Process-wide tokio runtime that backs [`block_on`]. We need a stable
 /// runtime — one built per call would die at end of call, taking with it
@@ -17,17 +40,20 @@ use std::time::Duration;
 /// caller. A long-lived runtime, kept driven by a background thread on a
 /// `pending` future, lets resources survive between calls.
 static GLOBAL_RT: LazyLock<tokio::runtime::Handle> = LazyLock::new(|| {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("failed to build block_on runtime");
-    let handle = rt.handle().clone();
-    thread::spawn(move || {
-        rt.block_on(async {
-            std::future::pending::<Infallible>().await;
+    no_unwind(|| {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let handle = rt.handle().clone();
+
+        // Drive the runtime so all calls to `GLOBAL_RT.block_on()` work.
+        thread::spawn(move || -> ! {
+            async fn forever() -> ! {
+                match std::future::pending::<Infallible>().await {}
+            }
+
+            no_unwind(move || rt.block_on(forever()))
         });
-    });
-    handle
+        handle
+    })
 });
 
 /// Run an async future to completion from synchronous code, returning its
