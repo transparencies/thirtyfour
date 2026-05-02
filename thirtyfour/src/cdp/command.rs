@@ -6,7 +6,10 @@
 //! will pick it up. [`CdpEvent`] is the same idea for events delivered over
 //! a WebSocket session.
 
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+pub use crate::common::protocol::Empty;
 
 /// A typed CDP command.
 ///
@@ -48,15 +51,6 @@ pub trait CdpEvent: DeserializeOwned + Clone + Send + Sync + 'static {
     /// Wire name of the event (e.g. `"Network.requestWillBeSent"`).
     const METHOD: &'static str;
 }
-
-/// Marker type for CDP commands whose response body is `{}`.
-///
-/// Many commands (`Network.enable`, `Page.reload`, `Emulation.clearDeviceMetricsOverride`,
-/// etc.) return an empty object on success. Use this as the [`CdpCommand::Returns`]
-/// type for those.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Empty {}
 
 /// A raw event delivered by [`crate::cdp::CdpSession::subscribe_all`].
 #[derive(Debug, Clone)]

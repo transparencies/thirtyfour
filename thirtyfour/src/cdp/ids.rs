@@ -4,81 +4,11 @@
 //! site (a `FrameId` is not a `TargetId`, a `NodeId` is not a `BackendNodeId`).
 //! These newtypes preserve the wire format while keeping them distinct in
 //! Rust.
+//!
+//! The `string_id!` and `int_id!` macros live in
+//! [`crate::common::protocol`] and are shared with the BiDi layer.
 
-use serde::{Deserialize, Serialize};
-use std::fmt;
-
-macro_rules! string_id {
-    ($(#[$meta:meta])* $name:ident) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-        #[serde(transparent)]
-        pub struct $name(pub String);
-
-        impl $name {
-            /// Construct from any string-like value.
-            pub fn new(s: impl Into<String>) -> Self {
-                Self(s.into())
-            }
-
-            /// Borrow the inner string.
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl From<String> for $name {
-            fn from(s: String) -> Self {
-                Self(s)
-            }
-        }
-
-        impl From<&str> for $name {
-            fn from(s: &str) -> Self {
-                Self(s.to_string())
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-    };
-}
-
-macro_rules! int_id {
-    ($(#[$meta:meta])* $name:ident($repr:ty)) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
-        #[serde(transparent)]
-        pub struct $name(pub $repr);
-
-        impl $name {
-            /// Construct from a raw integer.
-            pub fn new(v: $repr) -> Self {
-                Self(v)
-            }
-
-            /// Get the raw integer.
-            pub fn get(self) -> $repr {
-                self.0
-            }
-        }
-
-        impl From<$repr> for $name {
-            fn from(v: $repr) -> Self {
-                Self(v)
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-    };
-}
+use crate::common::protocol::{int_id, string_id};
 
 string_id! {
     /// Identifier for a frame in the page's frame tree (`Page.FrameId`).

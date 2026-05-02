@@ -3,48 +3,11 @@
 //! The spec uses a handful of distinct string-shaped ids that are easy to
 //! mix up. These newtypes preserve the wire format (`#[serde(transparent)]`)
 //! while keeping them distinct in Rust.
+//!
+//! The `string_id!` macro lives in [`crate::common::protocol`] and is
+//! shared with the CDP layer.
 
-use serde::{Deserialize, Serialize};
-use std::fmt;
-
-macro_rules! string_id {
-    ($(#[$meta:meta])* $name:ident) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-        #[serde(transparent)]
-        pub struct $name(pub String);
-
-        impl $name {
-            /// Construct from any string-like value.
-            pub fn new(s: impl Into<String>) -> Self {
-                Self(s.into())
-            }
-
-            /// Borrow the inner string.
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl From<String> for $name {
-            fn from(s: String) -> Self {
-                Self(s)
-            }
-        }
-
-        impl From<&str> for $name {
-            fn from(s: &str) -> Self {
-                Self(s.to_string())
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-    };
-}
+use crate::common::protocol::string_id;
 
 string_id! {
     /// Identifier for a browsing context (`browsingContext.BrowsingContext`).

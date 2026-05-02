@@ -515,19 +515,13 @@ async fn storage_set_get_delete_cookie_round_trip() -> WebDriverResult<()> {
             .ok()
             .and_then(|u| u.host_str().map(String::from))
             .expect("host");
-        bidi.storage()
-            .set_cookie(storage::PartialCookie {
-                name: "thirtyfour".to_string(),
-                value: storage::bytes_string("hello"),
-                domain: host.clone(),
-                path: Some("/".to_string()),
-                http_only: Some(false),
-                secure: Some(false),
-                same_site: Some(storage::SameSite::Lax),
-                expiry: None,
-            })
-            .await
-            .map_err(bidi_to_wd)?;
+        let mut cookie = Cookie::new("thirtyfour", "hello");
+        cookie.set_domain(host.clone());
+        cookie.set_path("/");
+        cookie.set_http_only(false);
+        cookie.set_secure(false);
+        cookie.set_same_site(storage::SameSite::Lax);
+        bidi.storage().set_cookie(cookie).await.map_err(bidi_to_wd)?;
         let got = bidi.storage().get_cookies_by_name("thirtyfour").await.map_err(bidi_to_wd)?;
         assert_eq!(got.cookies.len(), 1);
         assert_eq!(got.cookies[0].name, "thirtyfour");
