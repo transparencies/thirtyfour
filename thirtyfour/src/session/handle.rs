@@ -130,6 +130,12 @@ impl SessionHandle {
     /// Used internally by [`crate::WebDriver::driver_id`] /
     /// [`crate::WebDriver::on_driver_log`] to reach the underlying managed
     /// driver via [`DriverGuard::as_any`].
+    ///
+    /// Only the manager-feature side of the crate consumes this — without
+    /// `feature = "manager"` the guard slot is always `None` (there are no
+    /// `DriverGuard` implementors in scope), so the accessor would generate
+    /// a dead-code warning under `cargo hack`.
+    #[cfg(feature = "manager")]
     pub(crate) fn driver_guard(&self) -> Option<&Arc<dyn DriverGuard>> {
         self.driver_guard.as_ref()
     }
