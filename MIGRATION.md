@@ -1,186 +1,23 @@
 # Migration guide
 
-## New: WebDriver BiDi support
-
-The `bidi` feature flag adds a typed WebDriver BiDi (W3C bidirectional
-protocol) layer alongside the classic HTTP API and CDP. It targets
-chromedriver ≥ 115 and geckodriver ≥ 0.31.
-
-```toml
-# Cargo.toml
-thirtyfour = { version = "0.37", features = ["bidi"] }
-```
-
-```rust
-use thirtyfour::prelude::*;
-
-let mut caps = DesiredCapabilities::chrome();
-caps.enable_bidi()?;                                  // sets `webSocketUrl: true`
-let driver = WebDriver::new("http://localhost:4444", caps).await?;
-
-let bidi = driver.bidi().await?;                      // lazy-connect the WS
-let status = bidi.session().status().await?;
-let tree   = bidi.browsing_context().get_tree(None).await?;
-let ctx    = tree.contexts[0].context.clone();
-
-bidi.browsing_context()
-    .navigate(ctx.clone(), "https://example.com", None)
-    .await?;
-
-let result = bidi.script().evaluate(ctx, "document.title", false).await?;
-println!("title: {:?}", result.ok_value());
-```
-
-Curated typed bindings for **session, browser, browsingContext, script,
-network, storage, log, input, permissions** are under
-`thirtyfour::bidi::modules::*`. Events use the same broadcast pattern as
-the existing CDP events:
-
-```rust
-use thirtyfour::bidi::modules::browsing_context::events::Load;
-use futures_util::StreamExt;
-
-bidi.session().subscribe("browsingContext.load").await?;
-let mut load_events = bidi.subscribe::<Load>();
-// ... navigate, then load_events.next().await ...
-```
-
-The handle is cached on the session, so `driver.bidi().await` is cheap on
-subsequent calls. Coexists with the classic HTTP API and `driver.cdp()`.
-
 ## 0.36 → 0.37
 
-The 0.37 release has two main themes: a full rewrite of the CDP layer,
-and an API cleanup that drops the long-deprecation tail and tightens up
-a few rough edges. The CDP rewrite is purely additive (the old API is
-deprecated, not deleted), but the cleanup involves several breaking
-changes — see [API cleanup](#api-cleanup) below.
+- [`WebDriver` construction: builder API](#webdriver-construction-builder-api)
+- [`WebDriverConfig::reqwest_timeout` → `request_timeout`](#webdriverconfigreqwest_timeout--request_timeout)
+- [`Capabilities` is now a newtype](#capabilities-is-now-a-newtype)
+- [`CapabilitiesHelper` overhaul](#capabilitieshelper-overhaul)
+- [`insert_browser_option` → `set_browser_option`](#insert_browser_option--set_browser_option)
+- [`Alert` and `SwitchTo` types removed](#alert-and-switchto-types-removed)
+- [Removed deprecated method names](#removed-deprecated-method-names)
+- [Privatised public fields](#privatised-public-fields)
+- [Newly deprecated: `extensions::cdp`](#newly-deprecated-extensionscdp)
+- [Examples and doctests now use `anyhow`](#examples-and-doctests-now-use-anyhow)
 
-## CDP rewrite
-
-The Chrome DevTools Protocol (CDP) layer has been rewritten. The old
-[`thirtyfour::extensions::cdp::ChromeDevTools`] still works (deprecated)
-so existing code keeps compiling, but new code should use the new
-[`thirtyfour::cdp`] module.
-
-### What changed
-
-- A new top-level [`thirtyfour::cdp`] module with typed CDP commands
-  grouped by domain. Get a handle via [`WebDriver::cdp`] (no manual
-  `Arc::clone(&driver.handle)` needed).
-- One typed entry point: [`Cdp::send`] takes a request struct that
-  implements [`CdpCommand`] and returns its associated response type.
-- Domain facades — `driver.cdp().page().navigate(...)`,
-  `driver.cdp().network().clear_browser_cache()`, etc. — for ergonomics.
-- `Cdp::send_raw(method, params) -> Value` is the new untyped escape
-  hatch (replaces `execute_cdp` / `execute_cdp_with_params`).
-- New optional `cdp-events` feature: a WebSocket-backed
-  [`CdpSession`] with event subscription via flat-mode session
-  multiplexing. Powered by `tokio-tungstenite`.
-- New element ↔ CDP bridge: [`WebElement::cdp_remote_object_id`] and
-  [`WebElement::cdp_backend_node_id`].
-- `ChromeDevTools` and the rest of `extensions::cdp` are now deprecated
-  re-exports kept for compatibility. They will be removed in a future
-  release.
-
-### Quick before/after
-
-```rust
-// Before:
-use thirtyfour::extensions::cdp::ChromeDevTools;
-let dev = ChromeDevTools::new(driver.handle.clone());
-let v = dev.execute_cdp("Browser.getVersion").await?;
-let ua = v["userAgent"].as_str().unwrap();
-
-// After:
-let info = driver.cdp().browser().get_version().await?;
-let ua = info.user_agent;
-```
-
-```rust
-// Before — raw command with params:
-dev.execute_cdp_with_params(
-    "Network.setCacheDisabled",
-    serde_json::json!({"cacheDisabled": true}),
-).await?;
-
-// After — raw escape hatch (or use a typed struct):
-driver.cdp().send_raw(
-    "Network.setCacheDisabled",
-    serde_json::json!({"cacheDisabled": true}),
-).await?;
-```
-
-### Network conditions
-
-The legacy [`extensions::cdp::NetworkConditions`] wraps chromedriver's
-`/chromium/network_conditions` vendor endpoint (snake_case fields).
-The new [`cdp::domains::network::NetworkConditions`] wraps the standard
-CDP `Network.emulateNetworkConditions` command (camelCase on the wire,
-camelCase via `rename_all`). Prefer the new one — it's portable across
-Chrome, Edge, Brave and Opera, and goes through the same code path as
-all the other typed CDP commands.
-
-```rust
-// Before:
-use thirtyfour::extensions::cdp::{ChromeDevTools, NetworkConditions};
-let dev = ChromeDevTools::new(driver.handle.clone());
-let mut conditions = NetworkConditions::new();
-conditions.download_throughput = 256 * 1024;
-dev.set_network_conditions(&conditions).await?;
-
-// After:
-use thirtyfour::cdp::domains::network::NetworkConditions;
-driver.cdp().network().emulate_network_conditions(NetworkConditions {
-    offline: false,
-    latency: 0,
-    download_throughput: 256 * 1024,
-    upload_throughput: -1,
-    connection_type: None,
-}).await?;
-```
-
-### Events (new feature)
-
-Enable the `cdp-events` feature to get event subscription via a
-WebSocket-backed [`CdpSession`]:
-
-```rust
-let cdp = driver.cdp();
-let session = cdp.connect().await?;       // resolves the CDP WS URL
-session.send(thirtyfour::cdp::domains::network::Enable::default()).await?;
-let mut events = session.subscribe::<thirtyfour::cdp::domains::network::RequestWillBeSent>();
-
-driver.goto("https://example.com").await?;
-
-use futures_util::StreamExt;
-while let Some(event) = events.next().await {
-    println!("request: {}", event.request_id);
-}
-```
-
-URL discovery looks at `se:cdp` (set by Selenium Grid),
-`webSocketDebuggerUrl` directly on the session, and finally
-`goog:chromeOptions.debuggerAddress` (or the Edge equivalent) →
-`/json/version`. The W3C `webSocketUrl` capability is intentionally
-**not** used because that's a BiDi endpoint, not CDP.
-
-### What's deprecated
-
-- `thirtyfour::extensions::cdp::ChromeDevTools` — use [`Cdp`].
-- `ChromeDevTools::execute_cdp` / `execute_cdp_with_params` — use
-  [`Cdp::send`] / [`Cdp::send_raw`].
-- `thirtyfour::extensions::cdp::NetworkConditions` /
-  `ConnectionType` — use the equivalents in
-  [`cdp::domains::network`].
-- `thirtyfour::extensions::cdp::ChromeCommand` — internal type, but
-  marked deprecated since the new path doesn't go through it.
-
-## API cleanup
-
-Several long-deprecated APIs have been removed, and a few existing types
-have been tightened up. Most callers will hit one or two of these at
-compile time; the diff is usually a one-line rename.
+The Chrome DevTools Protocol layer was rewritten in this release,
+but the legacy [`thirtyfour::extensions::cdp::ChromeDevTools`] path is
+kept (deprecated) so existing CDP code keeps compiling. See the
+deprecation notes at the end of this guide for what's been marked for
+removal.
 
 ### `WebDriver` construction: builder API
 
@@ -375,6 +212,37 @@ The redundant `pub` fields on [`WebDriver`] and [`WebElement`] are now
 the only path to a `SessionHandle` is via [`WebDriver::new`],
 [`WebDriver::builder`], or [`WebDriver::managed`].
 
+### Newly deprecated: `extensions::cdp`
+
+The legacy `thirtyfour::extensions::cdp` module is now deprecated in
+favour of the new [`thirtyfour::cdp`] module. Existing code keeps
+compiling; new code should migrate.
+
+| Deprecated                                              | Replacement                                  |
+|---------------------------------------------------------|----------------------------------------------|
+| `extensions::cdp::ChromeDevTools`                       | [`Cdp`] via [`WebDriver::cdp`]               |
+| `ChromeDevTools::execute_cdp` / `execute_cdp_with_params` | [`Cdp::send`] / [`Cdp::send_raw`]          |
+| `extensions::cdp::NetworkConditions` / `ConnectionType` | equivalents in [`cdp::domains::network`]     |
+| `extensions::cdp::ChromeCommand`                        | (internal — no replacement needed)           |
+
+```rust
+// Before:
+use thirtyfour::extensions::cdp::ChromeDevTools;
+let dev = ChromeDevTools::new(driver.handle.clone());
+let v = dev.execute_cdp("Browser.getVersion").await?;
+let ua = v["userAgent"].as_str().unwrap();
+
+// After:
+let info = driver.cdp().browser().get_version().await?;
+let ua = info.user_agent;
+```
+
+The `extensions::cdp::NetworkConditions` wrapper specifically targets
+chromedriver's `/chromium/network_conditions` vendor endpoint
+(snake_case fields). The new [`cdp::domains::network::NetworkConditions`]
+goes through the standard CDP `Network.emulateNetworkConditions`
+command and is portable across Chrome, Edge, Brave and Opera.
+
 ### Examples and doctests now use `anyhow`
 
 The `color-eyre` dev-dependency has been replaced with `anyhow` in the
@@ -400,11 +268,6 @@ it used to say `color_eyre::Result<()>`.
 [`Cdp`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/struct.Cdp.html
 [`Cdp::send`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/struct.Cdp.html#method.send
 [`Cdp::send_raw`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/struct.Cdp.html#method.send_raw
-[`CdpCommand`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/trait.CdpCommand.html
-[`CdpSession`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/struct.CdpSession.html
 [`WebDriver::cdp`]: https://docs.rs/thirtyfour/latest/thirtyfour/struct.WebDriver.html#method.cdp
-[`WebElement::cdp_remote_object_id`]: https://docs.rs/thirtyfour/latest/thirtyfour/struct.WebElement.html#method.cdp_remote_object_id
-[`WebElement::cdp_backend_node_id`]: https://docs.rs/thirtyfour/latest/thirtyfour/struct.WebElement.html#method.cdp_backend_node_id
-[`extensions::cdp::NetworkConditions`]: https://docs.rs/thirtyfour/latest/thirtyfour/extensions/cdp/struct.NetworkConditions.html
-[`cdp::domains::network::NetworkConditions`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/domains/network/struct.NetworkConditions.html
 [`cdp::domains::network`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/domains/network/index.html
+[`cdp::domains::network::NetworkConditions`]: https://docs.rs/thirtyfour/latest/thirtyfour/cdp/domains/network/struct.NetworkConditions.html
