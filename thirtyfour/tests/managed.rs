@@ -275,12 +275,16 @@ async fn panic_unwind_kills_managed_driver_subprocess() -> WebDriverResult<()> {
 
 /// Several `WebDriver`s dropped at the same instant must all clean up.
 ///
-/// Each `SessionHandle::Drop` spawns its own OS thread that calls
-/// `support::block_on` (i.e. `Handle::block_on` on the process-wide
-/// `GLOBAL_RT`). This test fires N drops concurrently so multiple OS
-/// threads all park on `GLOBAL_RT` simultaneously — guards against any
-/// regression where the cleanup path serialises through a shared
-/// resource and deadlocks when more than one drop is in flight.
+/// Each `SessionHandle::Drop` spawns its own OS thread that builds a
+/// fresh `current_thread` runtime to run the DELETE /session call. The
+/// per-Drop runtime is intentional — a previous design routed all
+/// cleanup through a shared `GLOBAL_RT` (a single-threaded runtime
+/// driven by one parked thread), which serialised every concurrent
+/// drop through one I/O driver and caused chromedriver-readiness
+/// timeouts under cargo's parallel-test-binary harness. This test
+/// fires N drops concurrently to guard against any regression that
+/// re-introduces a shared-resource bottleneck (or a deadlock when
+/// more than one drop is in flight).
 ///
 /// Each `WebDriver::managed` call builds a fresh `WebDriverManager`,
 /// so the N sessions back onto N independent chromedriver subprocesses
@@ -304,7 +308,7 @@ async fn concurrent_drops_kill_all_subprocesses() -> WebDriverResult<()> {
 
         // Drop each driver on its own OS thread so the Drops run concurrently
         // (vs. `drop(Vec)` which would run them sequentially). All cleanup
-        // threads call `Handle::block_on` on the shared GLOBAL_RT at once.
+        // threads run their fresh per-Drop runtimes simultaneously.
         let drop_threads: Vec<_> =
             drivers.into_iter().map(|d| std::thread::spawn(move || drop(d))).collect();
         for t in drop_threads {
@@ -320,6 +324,131 @@ async fn concurrent_drops_kill_all_subprocesses() -> WebDriverResult<()> {
                 "chromedriver at {url} should be gone after concurrent drop"
             );
         }
+        Ok(())
+    })
+    .await
+}
+
+/// Many sessions created concurrently against a shared
+/// `WebDriverManager` must all start and tear down cleanly.
+///
+/// Mirrors the integration-test-harness pattern (one
+/// `Arc<WebDriverManager>` shared across many tests in a binary) and
+/// pushes more parallelism than `--test-threads=1` allows: every test
+/// binary in the suite shares a per-binary manager, but cargo runs
+/// multiple test binaries in parallel and each manager may have
+/// several sessions in flight when those binaries overlap.
+///
+/// What this catches:
+/// * Regressions in `SessionHandle::Drop` that re-share a single
+///   tokio runtime or single I/O driver across cleanups (the
+///   pre-fix shape funnelled all DELETE /session HTTP calls through
+///   one `current_thread` runtime, slowing concurrent teardown
+///   enough to time out chromedriver readiness in subsequent
+///   launches).
+/// * Deadlocks between session-launch HTTP traffic and cleanup HTTP
+///   traffic when both share the same runtime/driver.
+///
+/// Sessions are created in pairs: launch two, drop both, repeat.
+/// This pattern interleaves launch and drop traffic — the symptom
+/// case the user sees in CI.
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_sessions_against_shared_manager() -> WebDriverResult<()> {
+    use std::sync::Arc;
+    use thirtyfour::manager::WebDriverManager;
+
+    const ROUNDS: usize = 3;
+    const PARALLEL: usize = 3;
+
+    with_timeout(async {
+        let mgr: Arc<WebDriverManager> = WebDriverManager::builder().build();
+
+        for _round in 0..ROUNDS {
+            // Launch PARALLEL sessions concurrently against the same manager.
+            // Without dedup-on-version they each get the same chromedriver
+            // subprocess (the manager's `spawn_or_reuse` path), so this
+            // exercises concurrent session-create traffic against one driver
+            // while later iterations exercise concurrent drop+launch.
+            let sessions: Vec<WebDriver> =
+                futures_util::future::try_join_all((0..PARALLEL).map(|_| {
+                    let mgr = Arc::clone(&mgr);
+                    async move { mgr.launch(chrome_caps()).await }
+                }))
+                .await?;
+
+            assert_eq!(sessions.len(), PARALLEL, "all sessions should have launched");
+
+            // The shared manager dedups on (browser, version, host), so all
+            // sessions in a round MUST point at the same chromedriver URL.
+            let first_url = sessions[0].server_url().clone();
+            for s in &sessions {
+                assert_eq!(
+                    s.server_url(),
+                    &first_url,
+                    "shared manager must dedup all sessions onto one chromedriver"
+                );
+            }
+
+            // Cross-thread concurrent drop. Drop on per-session OS threads so
+            // multiple cleanup futures run truly in parallel — the case the
+            // shared-runtime regression broke.
+            let drop_threads: Vec<_> =
+                sessions.into_iter().map(|d| std::thread::spawn(move || drop(d))).collect();
+            for t in drop_threads {
+                t.join().expect("drop thread panicked");
+            }
+        }
+
+        Ok(())
+    })
+    .await
+}
+
+/// Interleaved create/drop on a shared manager: while one session is
+/// being torn down (its DELETE /session HTTP call is in flight),
+/// another session-create HTTP call is also in flight against the
+/// SAME chromedriver. Mirrors the worst-case CI shape where the
+/// previous test's drop overlaps with the next test's launch.
+///
+/// Specifically targets the regression where DELETE /session and
+/// New Session HTTP traffic both ran on the same `current_thread`
+/// runtime, with the cleanup blocking the launch's I/O progress
+/// (or vice versa).
+#[tokio::test(flavor = "multi_thread")]
+async fn interleaved_create_and_drop() -> WebDriverResult<()> {
+    use std::sync::Arc;
+    use thirtyfour::manager::WebDriverManager;
+
+    const ROUNDS: usize = 5;
+
+    with_timeout(async {
+        let mgr: Arc<WebDriverManager> = WebDriverManager::builder().build();
+
+        let mut prev: Option<WebDriver> = None;
+        for _round in 0..ROUNDS {
+            // Start a new session. This sends New Session against the shared
+            // chromedriver while the previous round's drop (if any) may still
+            // be in flight on its own OS thread.
+            let next = mgr.launch(chrome_caps()).await?;
+
+            // Now drop the previous session on a background thread (so its
+            // DELETE /session fires concurrently with this round's other
+            // work). For the very first round there's nothing to drop.
+            if let Some(old) = prev.take() {
+                let t = std::thread::spawn(move || drop(old));
+                // Join it before the next iteration so we keep test failures
+                // localised to the round that broke. Concurrency is real
+                // because the launch already happened above, racing the drop.
+                t.join().expect("drop thread panicked");
+            }
+            prev = Some(next);
+        }
+
+        // Final cleanup.
+        if let Some(last) = prev.take() {
+            last.quit().await?;
+        }
+
         Ok(())
     })
     .await

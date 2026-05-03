@@ -130,6 +130,12 @@ impl SessionHandle {
     /// Used internally by [`crate::WebDriver::driver_id`] /
     /// [`crate::WebDriver::on_driver_log`] to reach the underlying managed
     /// driver via [`DriverGuard::as_any`].
+    ///
+    /// Only the manager-feature side of the crate consumes this — without
+    /// `feature = "manager"` the guard slot is always `None` (there are no
+    /// `DriverGuard` implementors in scope), so the accessor would generate
+    /// a dead-code warning under `cargo hack`.
+    #[cfg(feature = "manager")]
     pub(crate) fn driver_guard(&self) -> Option<&Arc<dyn DriverGuard>> {
         self.driver_guard.as_ref()
     }
@@ -1256,15 +1262,41 @@ impl Drop for SessionHandle {
             driver_guard: None,
         });
 
-        // Run the DELETE /session call on `support::GLOBAL_RT` from a dedicated
-        // OS thread, joined synchronously so Drop blocks until cleanup finishes.
-        // The new thread escapes any user tokio runtime context (since
-        // `support::block_on` uses `Handle::block_on`, which panics from inside
-        // another runtime). We also rebuild the HttpClient because its IO
-        // drivers were tied to the user's runtime — the future polls on
-        // `GLOBAL_RT`, so the client needs fresh drivers there.
+        // Run the DELETE /session call on a freshly-built single-thread tokio
+        // runtime, on a dedicated OS thread, joined synchronously so Drop
+        // blocks until cleanup finishes. The new thread has no tokio context,
+        // so building a runtime on it is fine even when the user is inside
+        // their own runtime. We also rebuild the HttpClient because the IO
+        // drivers from the original runtime may already be gone.
+        //
+        // Why NOT reuse `support::GLOBAL_RT` here: `GLOBAL_RT` is a single
+        // `current_thread` runtime whose core lives on one background thread.
+        // Routing every `SessionHandle::Drop` through it serialises every
+        // cleanup HTTP call onto that one thread / IO driver, even when the
+        // Drops fire from independent OS threads. Under concurrent test load
+        // (cargo runs integration test binaries in parallel; each binary can
+        // have multiple sessions in flight) the queued cleanups slow each
+        // other down enough to push later session creates past
+        // chromedriver's readiness deadline, surfacing as
+        // `DevToolsActivePort file doesn't exist`, "driver did not become
+        // ready within 30s", and Windows chromedriver.exe sharing
+        // violations. A per-Drop fresh runtime has its own independent
+        // IO driver — concurrent Drops don't fight for one core. The
+        // runtime build is in the microsecond range; cheap relative to
+        // the HTTP DELETE it wraps.
         let _ = std::thread::spawn(move || {
-            support::block_on(async move {
+            let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+                Ok(rt) => rt,
+                Err(err) => {
+                    tracing::warn!(
+                        %err,
+                        "failed to build cleanup runtime; WebDriver session may leak \
+                         until the driver times it out"
+                    );
+                    return;
+                }
+            };
+            rt.block_on(async move {
                 this.client = this.client.new().await;
                 if let Err(err) = this.quit().await {
                     tracing::warn!(
