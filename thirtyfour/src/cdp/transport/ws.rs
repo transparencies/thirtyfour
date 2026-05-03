@@ -78,7 +78,7 @@ impl WsTransport {
         // Writer task.
         tokio::spawn(async move {
             while let Some(text) = out_rx.recv().await {
-                if sink.send(Message::Text(text)).await.is_err() {
+                if sink.send(Message::Text(text.into())).await.is_err() {
                     break;
                 }
             }
@@ -90,9 +90,9 @@ impl WsTransport {
         tokio::spawn(async move {
             while let Some(message) = stream.next().await {
                 let frame = match message {
-                    Ok(Message::Text(t)) => t,
-                    Ok(Message::Binary(b)) => match String::from_utf8(b) {
-                        Ok(s) => s,
+                    Ok(Message::Text(t)) => t.as_str().to_owned(),
+                    Ok(Message::Binary(b)) => match std::str::from_utf8(&b) {
+                        Ok(s) => s.to_owned(),
                         Err(_) => continue,
                     },
                     Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)) => continue,
