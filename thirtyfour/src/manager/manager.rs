@@ -54,6 +54,12 @@ pub struct WebDriverManager {
     download_client: reqwest::Client,
     /// Map from `(browser, resolved_version)` to a Weak handle on a live driver.
     drivers: Mutex<HashMap<DriverKey, Weak<ManagedDriverProcess>>>,
+    /// Cache for the local-browser version probe. The installed browser
+    /// doesn't change for the lifetime of a manager, so probing
+    /// `<browser> --version` once per `(browser, custom_binary)` is enough.
+    /// Skips repeated subprocess spawns and avoids transient
+    /// `Command::output` failures on busy CI runners.
+    local_versions: Mutex<HashMap<(BrowserKind, Option<String>), String>>,
     /// Status-event emitter (also forwards to `tracing`).
     pub(crate) emitter: Emitter,
     /// Manager-wide driver-log subscribers — propagated into every spawned
@@ -384,6 +390,7 @@ impl WebDriverManagerBuilder {
                 .expect("default reqwest client should always build"),
             cfg,
             drivers: Mutex::new(HashMap::new()),
+            local_versions: Mutex::new(HashMap::new()),
             emitter,
             log_subscribers,
             next_driver_id: Arc::new(AtomicU64::new(0)),
@@ -510,11 +517,22 @@ impl WebDriverManager {
         }
 
         // For MatchLocalBrowser we probe the binary up front (potentially using a
-        // capabilities-supplied path).
+        // capabilities-supplied path). Cached per `(browser, custom_binary)` so
+        // we don't re-spawn `<browser> --version` for every session.
         let local = match self.cfg.version {
             DriverVersion::MatchLocalBrowser => {
                 let custom = browser.binary_from_caps(caps);
-                Some(detect_local_version(browser, custom.as_deref(), &self.emitter)?)
+                let key = (browser, custom.clone());
+                let mut cache = self.local_versions.lock().await;
+                let version = match cache.get(&key) {
+                    Some(v) => v.clone(),
+                    None => {
+                        let v = detect_local_version(browser, custom.as_deref(), &self.emitter)?;
+                        cache.insert(key, v.clone());
+                        v
+                    }
+                };
+                Some(version)
             }
             _ => None,
         };
