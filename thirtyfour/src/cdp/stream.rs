@@ -11,6 +11,7 @@ use futures_util::Stream;
 use serde::de::DeserializeOwned;
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
+use tokio_stream::wrappers::BroadcastStream;
 
 use super::CdpEvent;
 use super::SessionId;
@@ -33,7 +34,7 @@ use super::command::RawEvent;
 /// [`CdpSession::subscribe_all`]: crate::cdp::CdpSession::subscribe_all
 #[derive(Debug)]
 pub struct EventStream<T> {
-    rx: Receiver<RawEvent>,
+    rx: BroadcastStream<RawEvent>,
     session: Option<SessionId>,
     method: &'static str,
     _marker: std::marker::PhantomData<fn() -> T>,
@@ -46,7 +47,7 @@ impl<T> EventStream<T> {
         method: &'static str,
     ) -> Self {
         Self {
-            rx,
+            rx: BroadcastStream::new(rx),
             session,
             method,
             _marker: std::marker::PhantomData,
@@ -63,47 +64,22 @@ impl<T: CdpEvent> Stream for EventStream<T> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
-        // Drain any already-buffered events synchronously first; only park on
-        // the channel if there's nothing pending.
+
         loop {
-            match this.rx.try_recv() {
-                Ok(raw) => {
+            match Pin::new(&mut this.rx).poll_next(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Ready(Some(Err(_lagged))) => continue,
+                Poll::Ready(Some(Ok(raw))) => {
                     if this.matches(&raw) {
                         match serde_json::from_value::<T>(raw.params.clone()) {
                             Ok(parsed) => return Poll::Ready(Some(parsed)),
                             Err(e) => warn_parse_failure::<T>(this.method, &raw, &e),
                         }
                     }
+                    // didn't match, poll again
                 }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Lagged(_)) => continue,
-                Err(TryRecvError::Closed) => return Poll::Ready(None),
             }
-        }
-
-        // Nothing buffered — park on the channel for the next event.
-        let polled = {
-            let recv = this.rx.recv();
-            tokio::pin!(recv);
-            recv.poll(cx)
-        };
-        match polled {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(raw)) => {
-                if this.matches(&raw) {
-                    match serde_json::from_value::<T>(raw.params.clone()) {
-                        Ok(parsed) => return Poll::Ready(Some(parsed)),
-                        Err(e) => warn_parse_failure::<T>(this.method, &raw, &e),
-                    }
-                }
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Lagged(_))) => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Closed)) => Poll::Ready(None),
         }
     }
 }
