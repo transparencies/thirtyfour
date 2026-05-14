@@ -9,8 +9,7 @@ use std::task::{Context, Poll};
 
 use futures_util::Stream;
 use serde::de::DeserializeOwned;
-use tokio::sync::broadcast::error::TryRecvError;
-use tokio::sync::broadcast::{Receiver, error::RecvError};
+use tokio::sync::broadcast::Receiver;
 use tokio_stream::wrappers::BroadcastStream;
 
 use super::CdpEvent;
@@ -108,14 +107,14 @@ fn warn_parse_failure<T>(method: &str, raw: &RawEvent, err: &serde_json::Error) 
 /// [`CdpSession::subscribe_all`]: crate::cdp::CdpSession::subscribe_all
 #[derive(Debug)]
 pub struct RawEventStream {
-    rx: Receiver<RawEvent>,
+    rx: BroadcastStream<RawEvent>,
     session: Option<SessionId>,
 }
 
 impl RawEventStream {
     pub(crate) fn new(rx: Receiver<RawEvent>, session: Option<SessionId>) -> Self {
         Self {
-            rx,
+            rx: BroadcastStream::new(rx),
             session,
         }
     }
@@ -127,36 +126,17 @@ impl Stream for RawEventStream {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         loop {
-            match this.rx.try_recv() {
-                Ok(raw) => {
+            match Pin::new(&mut this.rx).poll_next(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Ready(Some(Err(_lagged))) => continue,
+                Poll::Ready(Some(Ok(raw))) => {
                     if raw.session_id == this.session {
                         return Poll::Ready(Some(raw));
                     }
+                    // didn't match, poll again
                 }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Lagged(_)) => continue,
-                Err(TryRecvError::Closed) => return Poll::Ready(None),
             }
-        }
-        let polled = {
-            let recv = this.rx.recv();
-            tokio::pin!(recv);
-            recv.poll(cx)
-        };
-        match polled {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(raw)) => {
-                if raw.session_id == this.session {
-                    return Poll::Ready(Some(raw));
-                }
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Lagged(_))) => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Closed)) => Poll::Ready(None),
         }
     }
 }
