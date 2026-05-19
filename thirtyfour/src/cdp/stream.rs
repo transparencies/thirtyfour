@@ -153,6 +153,7 @@ mod tests {
     use futures_util::StreamExt;
     use serde::Deserialize;
     use serde_json::json;
+    use std::time::Duration;
     use tokio::sync::broadcast;
 
     #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -216,5 +217,73 @@ mod tests {
         let evt = stream.next().await.unwrap();
         assert_eq!(evt.method, "X.b");
         assert_eq!(evt.params["k"], 1);
+    }
+
+    /// Verify that a typed stream receives events delivered *after* the
+    /// stream has been polled and parked.
+    ///
+    /// The bug being regression-tested: `poll_next` created a fresh
+    /// `broadcast::Receiver::recv()` future on each call, polled it, and
+    /// then dropped it on `Poll::Pending`. Dropping the future unregistered
+    /// the waker from the broadcast channel, so any events arriving after
+    /// that point never woke the parked task. The test spawns a background
+    /// task that polls the stream, yields to let it park, sends an event,
+    /// and asserts the event is received within a timeout.
+    #[tokio::test]
+    async fn typed_stream_receives_event_sent_after_poll_pending() {
+        let (tx, _) = broadcast::channel::<RawEvent>(16);
+        let mut stream = EventStream::<Hello>::new(tx.subscribe(), None, Hello::METHOD);
+
+        let (result_tx, mut result_rx) = tokio::sync::oneshot::channel::<Option<Hello>>();
+        tokio::spawn(async move {
+            let evt = stream.next().await;
+            let _ = result_tx.send(evt);
+        });
+
+        // Yield repeatedly to let the spawned task run, reach its first
+        // `poll_next` call, get `Poll::Pending`, and park itself.
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+
+        // Send the event after the stream has parked.
+        tx.send(raw("Test.hello", None, json!({"text": "after-poll"}))).unwrap();
+
+        let evt = tokio::time::timeout(Duration::from_secs(5), &mut result_rx)
+            .await
+            .expect("timed out. Stream never received the event")
+            .expect("oneshot cancelled")
+            .expect("expected Some event");
+
+        assert_eq!(evt.text, "after-poll");
+    }
+
+    /// Same as [`typed_stream_receives_event_sent_after_poll_pending`] but
+    /// for the untyped [`RawEventStream`].
+    #[tokio::test]
+    async fn raw_stream_receives_event_sent_after_poll_pending() {
+        let (tx, _) = broadcast::channel::<RawEvent>(16);
+        let mut stream = RawEventStream::new(tx.subscribe(), None);
+
+        let (result_tx, mut result_rx) = tokio::sync::oneshot::channel::<Option<RawEvent>>();
+        tokio::spawn(async move {
+            let evt = stream.next().await;
+            let _ = result_tx.send(evt);
+        });
+
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+
+        tx.send(raw("Test.hello", None, json!({"text": "after-poll"}))).unwrap();
+
+        let evt = tokio::time::timeout(Duration::from_secs(5), &mut result_rx)
+            .await
+            .expect("timed out. Stream never received the event")
+            .expect("oneshot cancelled")
+            .expect("expected Some event");
+
+        assert_eq!(evt.method, "Test.hello");
+        assert_eq!(evt.params["text"], "after-poll");
     }
 }
