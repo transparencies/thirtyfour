@@ -9,8 +9,8 @@ use std::task::{Context, Poll};
 
 use futures_util::Stream;
 use serde::de::DeserializeOwned;
-use tokio::sync::broadcast::error::TryRecvError;
-use tokio::sync::broadcast::{Receiver, error::RecvError};
+use tokio::sync::broadcast::Receiver;
+use tokio_stream::wrappers::BroadcastStream;
 
 use super::CdpEvent;
 use super::SessionId;
@@ -33,7 +33,7 @@ use super::command::RawEvent;
 /// [`CdpSession::subscribe_all`]: crate::cdp::CdpSession::subscribe_all
 #[derive(Debug)]
 pub struct EventStream<T> {
-    rx: Receiver<RawEvent>,
+    rx: BroadcastStream<RawEvent>,
     session: Option<SessionId>,
     method: &'static str,
     _marker: std::marker::PhantomData<fn() -> T>,
@@ -46,7 +46,7 @@ impl<T> EventStream<T> {
         method: &'static str,
     ) -> Self {
         Self {
-            rx,
+            rx: BroadcastStream::new(rx),
             session,
             method,
             _marker: std::marker::PhantomData,
@@ -63,47 +63,22 @@ impl<T: CdpEvent> Stream for EventStream<T> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
-        // Drain any already-buffered events synchronously first; only park on
-        // the channel if there's nothing pending.
+
         loop {
-            match this.rx.try_recv() {
-                Ok(raw) => {
+            match Pin::new(&mut this.rx).poll_next(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Ready(Some(Err(_lagged))) => continue,
+                Poll::Ready(Some(Ok(raw))) => {
                     if this.matches(&raw) {
                         match serde_json::from_value::<T>(raw.params.clone()) {
                             Ok(parsed) => return Poll::Ready(Some(parsed)),
                             Err(e) => warn_parse_failure::<T>(this.method, &raw, &e),
                         }
                     }
+                    // didn't match, poll again
                 }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Lagged(_)) => continue,
-                Err(TryRecvError::Closed) => return Poll::Ready(None),
             }
-        }
-
-        // Nothing buffered — park on the channel for the next event.
-        let polled = {
-            let recv = this.rx.recv();
-            tokio::pin!(recv);
-            recv.poll(cx)
-        };
-        match polled {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(raw)) => {
-                if this.matches(&raw) {
-                    match serde_json::from_value::<T>(raw.params.clone()) {
-                        Ok(parsed) => return Poll::Ready(Some(parsed)),
-                        Err(e) => warn_parse_failure::<T>(this.method, &raw, &e),
-                    }
-                }
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Lagged(_))) => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Closed)) => Poll::Ready(None),
         }
     }
 }
@@ -132,14 +107,14 @@ fn warn_parse_failure<T>(method: &str, raw: &RawEvent, err: &serde_json::Error) 
 /// [`CdpSession::subscribe_all`]: crate::cdp::CdpSession::subscribe_all
 #[derive(Debug)]
 pub struct RawEventStream {
-    rx: Receiver<RawEvent>,
+    rx: BroadcastStream<RawEvent>,
     session: Option<SessionId>,
 }
 
 impl RawEventStream {
     pub(crate) fn new(rx: Receiver<RawEvent>, session: Option<SessionId>) -> Self {
         Self {
-            rx,
+            rx: BroadcastStream::new(rx),
             session,
         }
     }
@@ -151,36 +126,17 @@ impl Stream for RawEventStream {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         loop {
-            match this.rx.try_recv() {
-                Ok(raw) => {
+            match Pin::new(&mut this.rx).poll_next(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Ready(Some(Err(_lagged))) => continue,
+                Poll::Ready(Some(Ok(raw))) => {
                     if raw.session_id == this.session {
                         return Poll::Ready(Some(raw));
                     }
+                    // didn't match, poll again
                 }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Lagged(_)) => continue,
-                Err(TryRecvError::Closed) => return Poll::Ready(None),
             }
-        }
-        let polled = {
-            let recv = this.rx.recv();
-            tokio::pin!(recv);
-            recv.poll(cx)
-        };
-        match polled {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(raw)) => {
-                if raw.session_id == this.session {
-                    return Poll::Ready(Some(raw));
-                }
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Lagged(_))) => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Poll::Ready(Err(RecvError::Closed)) => Poll::Ready(None),
         }
     }
 }
@@ -197,6 +153,7 @@ mod tests {
     use futures_util::StreamExt;
     use serde::Deserialize;
     use serde_json::json;
+    use std::time::Duration;
     use tokio::sync::broadcast;
 
     #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -260,5 +217,73 @@ mod tests {
         let evt = stream.next().await.unwrap();
         assert_eq!(evt.method, "X.b");
         assert_eq!(evt.params["k"], 1);
+    }
+
+    /// Verify that a typed stream receives events delivered *after* the
+    /// stream has been polled and parked.
+    ///
+    /// The bug being regression-tested: `poll_next` created a fresh
+    /// `broadcast::Receiver::recv()` future on each call, polled it, and
+    /// then dropped it on `Poll::Pending`. Dropping the future unregistered
+    /// the waker from the broadcast channel, so any events arriving after
+    /// that point never woke the parked task. The test spawns a background
+    /// task that polls the stream, yields to let it park, sends an event,
+    /// and asserts the event is received within a timeout.
+    #[tokio::test]
+    async fn typed_stream_receives_event_sent_after_poll_pending() {
+        let (tx, _) = broadcast::channel::<RawEvent>(16);
+        let mut stream = EventStream::<Hello>::new(tx.subscribe(), None, Hello::METHOD);
+
+        let (result_tx, mut result_rx) = tokio::sync::oneshot::channel::<Option<Hello>>();
+        tokio::spawn(async move {
+            let evt = stream.next().await;
+            let _ = result_tx.send(evt);
+        });
+
+        // Yield repeatedly to let the spawned task run, reach its first
+        // `poll_next` call, get `Poll::Pending`, and park itself.
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+
+        // Send the event after the stream has parked.
+        tx.send(raw("Test.hello", None, json!({"text": "after-poll"}))).unwrap();
+
+        let evt = tokio::time::timeout(Duration::from_secs(5), &mut result_rx)
+            .await
+            .expect("timed out. Stream never received the event")
+            .expect("oneshot cancelled")
+            .expect("expected Some event");
+
+        assert_eq!(evt.text, "after-poll");
+    }
+
+    /// Same as [`typed_stream_receives_event_sent_after_poll_pending`] but
+    /// for the untyped [`RawEventStream`].
+    #[tokio::test]
+    async fn raw_stream_receives_event_sent_after_poll_pending() {
+        let (tx, _) = broadcast::channel::<RawEvent>(16);
+        let mut stream = RawEventStream::new(tx.subscribe(), None);
+
+        let (result_tx, mut result_rx) = tokio::sync::oneshot::channel::<Option<RawEvent>>();
+        tokio::spawn(async move {
+            let evt = stream.next().await;
+            let _ = result_tx.send(evt);
+        });
+
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+
+        tx.send(raw("Test.hello", None, json!({"text": "after-poll"}))).unwrap();
+
+        let evt = tokio::time::timeout(Duration::from_secs(5), &mut result_rx)
+            .await
+            .expect("timed out. Stream never received the event")
+            .expect("oneshot cancelled")
+            .expect("expected Some event");
+
+        assert_eq!(evt.method, "Test.hello");
+        assert_eq!(evt.params["text"], "after-poll");
     }
 }

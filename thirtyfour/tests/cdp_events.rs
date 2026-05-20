@@ -18,8 +18,9 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use thirtyfour::ChromeCapabilities;
-use thirtyfour::cdp::CdpSession;
+use thirtyfour::cdp::domains::fetch::RequestPaused;
 use thirtyfour::cdp::domains::{fetch, log, network, page, runtime, target};
+use thirtyfour::cdp::{CdpSession, EventStream};
 use thirtyfour::prelude::*;
 
 use crate::common::launch_managed_chrome;
@@ -319,6 +320,61 @@ async fn fetch_request_paused_then_continue() -> WebDriverResult<()> {
         // is that we received the paused event.
         let driver = nav.await.expect("nav join");
         let _ = driver;
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn fetch_background_listener_receives_paused_event() -> WebDriverResult<()> {
+    // Regression test: events delivered after a stream has parked must
+    // still wake the consumer. The listener runs in a background task
+    // (mirroring the pattern from #321) to ensure the waker
+    // registration survives across poll boundaries.
+    with_timeout(async {
+        let url = spawn_local_http("<html><body>background listener</body></html>").await?;
+        let (driver, session) = open_session().await?;
+        session.send(fetch::Enable::default()).await.expect("Fetch.enable");
+
+        // Subscribe and move the stream into a background listener task.
+        let mut events: EventStream<RequestPaused> = session.subscribe::<RequestPaused>().await?;
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Some(event) = events.next().await {
+                if tx.send(event).is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Navigate and wait for the background listener to receive the
+        // `RequestPaused` event.
+        let nav = {
+            let url = url.clone();
+            tokio::spawn(async move { driver.goto(&url).await })
+        };
+
+        let event = tokio::time::timeout(EVENT_TIMEOUT, rx.recv())
+            .await
+            .expect("background listener never received the event")
+            .expect("channel closed");
+
+        assert!(!event.request_id.as_str().is_empty());
+
+        // Let the request through so navigation completes.
+        session
+            .send(fetch::ContinueRequest {
+                request_id: event.request_id,
+                url: None,
+                method: None,
+                post_data: None,
+                headers: None,
+            })
+            .await
+            .expect("Fetch.continueRequest");
+
+        let _driver = nav.await.expect("nav join");
         Ok(())
     })
     .await
