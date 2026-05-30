@@ -216,7 +216,7 @@ fn run_version(path: &str, browser: BrowserKind) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         let _ = browser;
-        return read_pe_version(path);
+        read_pe_version(path)
     }
 
     #[cfg(not(target_os = "windows"))]
