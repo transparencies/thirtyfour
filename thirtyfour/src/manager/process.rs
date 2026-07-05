@@ -43,6 +43,10 @@ pub(crate) struct SpawnConfig {
     pub host: IpAddr,
     pub ready_timeout: Duration,
     pub stdio: StdioMode,
+    /// Windows only: skip `CREATE_NO_WINDOW` so the driver gets its own
+    /// console window. Only read on Windows.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub show_console_window: bool,
 }
 
 impl Default for SpawnConfig {
@@ -51,6 +55,7 @@ impl Default for SpawnConfig {
             host: IpAddr::V4(Ipv4Addr::LOCALHOST),
             ready_timeout: Duration::from_secs(30),
             stdio: StdioMode::default(),
+            show_console_window: false,
         }
     }
 }
@@ -173,6 +178,17 @@ async fn spawn_at_port(
     cmd.stderr(cfg.stdio.to_stdio());
     cmd.stdin(Stdio::null());
     cmd.kill_on_drop(true);
+
+    // On Windows a console subprocess pops up its own console window whenever
+    // the parent has none (GUI apps built with `windows_subsystem =
+    // "windows"`). Suppress it with CREATE_NO_WINDOW unless the user opted in
+    // via `show_console_window`. Explicitly-set stdio handles still work under
+    // CREATE_NO_WINDOW, so every `StdioMode` behaves the same either way.
+    #[cfg(windows)]
+    if !cfg.show_console_window {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
 
     // chromedriver / msedgedriver bind only to loopback by default; pass
     // --allowed-ips when the user has configured a non-loopback host.

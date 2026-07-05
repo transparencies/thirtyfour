@@ -86,6 +86,9 @@ pub(crate) struct ResolvedConfig {
     pub offline: bool,
     pub mirror: Mirror,
     pub stdio: StdioMode,
+    /// Windows only: give the driver process its own console window instead
+    /// of suppressing it with `CREATE_NO_WINDOW`.
+    pub show_console_window: bool,
     /// Per-browser driver-binary overrides. When a browser appears here,
     /// `ensure_driver` skips download/cache and spawns the supplied binary
     /// directly.
@@ -102,6 +105,7 @@ impl std::fmt::Debug for ResolvedConfig {
             .field("ready_timeout", &self.ready_timeout)
             .field("offline", &self.offline)
             .field("stdio", &self.stdio)
+            .field("show_console_window", &self.show_console_window)
             .field("driver_paths", &self.driver_paths)
             .finish_non_exhaustive()
     }
@@ -166,6 +170,7 @@ pub struct WebDriverManagerBuilder {
     pub(crate) offline: Option<bool>,
     pub(crate) mirror: Option<Mirror>,
     pub(crate) stdio: Option<StdioMode>,
+    pub(crate) show_console_window: Option<bool>,
     /// Per-browser driver-binary overrides registered via
     /// [`WebDriverManagerBuilder::driver_binary`].
     pub(crate) driver_paths: HashMap<BrowserKind, PathBuf>,
@@ -187,6 +192,7 @@ impl std::fmt::Debug for WebDriverManagerBuilder {
             .field("ready_timeout", &self.ready_timeout)
             .field("offline", &self.offline)
             .field("stdio", &self.stdio)
+            .field("show_console_window", &self.show_console_window)
             .field("driver_paths", &self.driver_paths)
             .field("status_subscribers", &self.status_subscribers.len())
             .field("log_subscribers", &self.log_subscribers.len())
@@ -205,6 +211,7 @@ impl Clone for WebDriverManagerBuilder {
             offline: self.offline,
             mirror: self.mirror.clone(),
             stdio: self.stdio,
+            show_console_window: self.show_console_window,
             driver_paths: self.driver_paths.clone(),
             status_subscribers: self.status_subscribers.iter().map(Arc::clone).collect(),
             log_subscribers: self.log_subscribers.iter().map(Arc::clone).collect(),
@@ -310,6 +317,21 @@ impl WebDriverManagerBuilder {
         self
     }
 
+    /// Windows only: give the driver process its own console window.
+    ///
+    /// By default the driver is spawned with the `CREATE_NO_WINDOW` creation
+    /// flag so that no console window flashes up — this matters for GUI apps
+    /// built with `#![windows_subsystem = "windows"]`, where the console
+    /// subprocess would otherwise pop open a visible console. Driver output
+    /// is unaffected either way: stdout/stderr are still delivered according
+    /// to [`WebDriverManagerBuilder::stdio`].
+    ///
+    /// No-op on non-Windows platforms.
+    pub fn show_console_window(mut self, yes: bool) -> Self {
+        self.show_console_window = Some(yes);
+        self
+    }
+
     /// Use an already-installed driver binary at `path` for the given
     /// browser instead of resolving and downloading one. Skips the
     /// version-resolution and download/cache flow entirely; the binary is
@@ -373,6 +395,7 @@ impl WebDriverManagerBuilder {
             offline: self.offline.unwrap_or(false),
             mirror: self.mirror.unwrap_or_default(),
             stdio: self.stdio.unwrap_or_default(),
+            show_console_window: self.show_console_window.unwrap_or(false),
             driver_paths: self.driver_paths,
         };
         let emitter = Emitter::new();
@@ -612,6 +635,7 @@ impl WebDriverManager {
                 host: self.cfg.host,
                 ready_timeout: self.cfg.ready_timeout,
                 stdio: self.cfg.stdio,
+                show_console_window: self.cfg.show_console_window,
             },
             SpawnContext {
                 driver_id: self.mint_driver_id(),
