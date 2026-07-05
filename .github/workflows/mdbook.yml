@@ -4,6 +4,13 @@ on:
     branches:
       - main
 
+# Allow only one concurrent Pages deployment. Don't cancel in-progress runs:
+# let the active deployment finish, but supersede any queued run so rapid
+# merges to main can't race each other in the deploy-pages step.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
