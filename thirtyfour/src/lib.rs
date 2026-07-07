@@ -34,7 +34,9 @@
 //!
 //! * `rustls-tls`: (Default) Use rustls to provide TLS support (via reqwest).
 //! * `native-tls`: Use native TLS (via reqwest).
-//! * `component`: (Default) Enable the `Component` derive macro (via thirtyfour-macros).
+//! * `component`: (Default) Enable the `Component` derive macro
+//!   (via thirtyfour-macros) and export [`prelude::Component`] /
+//!   [`prelude::ElementResolver`] from [`prelude`].
 //! * `cdp`: (Default) Typed Chrome DevTools Protocol commands via
 //!   [`WebDriver::cdp`] / [`WebElement::cdp_remote_object_id`] /
 //!   [`WebElement::cdp_backend_node_id`].
@@ -115,6 +117,8 @@
 //!
 //! Components allow you to wrap a web component using smart element resolvers that can
 //! automatically re-query stale elements, and much more.
+//! The default `component` feature makes [`prelude::Component`] and
+//! [`prelude::ElementResolver`] available from [`prelude`].
 //!
 //! ```ignore
 //! #[derive(Debug, Clone, Component)]
@@ -187,6 +191,8 @@ pub use web_element::WebElement;
 pub mod prelude {
     pub use crate::WebDriver;
     pub use crate::WebElement;
+    #[cfg(feature = "component")]
+    pub use crate::components::{Component, ElementResolver};
     pub use crate::error::{WebDriverError, WebDriverResult};
     pub use crate::extensions::query::{ElementPoller, ElementQueryable, ElementWaitable};
     pub use crate::session::scriptret::ScriptRet;

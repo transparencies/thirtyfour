@@ -6,7 +6,6 @@ mod feature_component {
     use assert_matches::assert_matches;
     use rstest::rstest;
     use std::time::Instant;
-    use thirtyfour::components::{Component, ElementResolver};
     use thirtyfour::error::WebDriverErrorInner;
     use thirtyfour::extensions::query::ElementQueryOptions;
     use thirtyfour::support::block_on;

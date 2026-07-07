@@ -7,13 +7,7 @@
 
 use std::time::Duration;
 
-use thirtyfour::{
-    components::{Component, ElementResolver},
-    prelude::*,
-    resolve,
-    stringmatch::StringMatchable,
-    support::sleep,
-};
+use thirtyfour::{prelude::*, resolve, stringmatch::StringMatchable, support::sleep};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

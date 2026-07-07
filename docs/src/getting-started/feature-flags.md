@@ -2,7 +2,9 @@
 
 - `rustls-tls`: (Default) Use rustls to provide TLS support (via reqwest).
 - `native-tls`: Use native TLS (via reqwest).
-- `component`: (Default) Enable the `Component` derive macro (via thirtyfour_macros).
+- `component`: (Default) Enable the `Component` derive macro (via
+  thirtyfour_macros) and export `Component` / `ElementResolver` from the
+  prelude.
 - `manager`: (Default) Automatic webdriver download and process management;
   see [WebDriver Manager](../features/manager.md). Disable this if you'd
   rather manage the webdriver yourself — see

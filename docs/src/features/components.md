@@ -28,7 +28,6 @@ Wrap it in a Component:
 
 ```rust
 use thirtyfour::prelude::*;
-use thirtyfour::components::ElementResolver;
 
 #[derive(Debug, Clone, Component)]
 pub struct SearchForm {
@@ -136,12 +135,15 @@ Every resolver field exposes the same handful of methods:
 Two macros wrap the most common calls:
 
 ```rust
+use thirtyfour::{resolve, resolve_present};
+
 let elem = resolve!(self.input);            // self.input.resolve().await?
 let elem = resolve_present!(self.input);    // self.input.resolve_present().await?
 ```
 
 The macros are useful for chained method calls without scattering
-`.await?` around:
+`.await?` around. They are exported from the crate root instead of the
+prelude so broad macro names do not get glob-imported accidentally:
 
 ```rust
 resolve!(self.submit).click().await?;
@@ -283,3 +285,8 @@ For the full list of methods and attribute combinations, see:
   the `Component` trait, `ElementResolver`, and helper wrappers.
 - [`thirtyfour_macros::Component`](https://docs.rs/thirtyfour-macros/latest/thirtyfour_macros/derive.Component.html) —
   the derive macro and every supported attribute.
+
+With the default `component` feature enabled, `use thirtyfour::prelude::*;`
+imports the `Component` derive macro and `ElementResolver`. Import
+`resolve!` and `resolve_present!` explicitly from `thirtyfour` when you
+want the shorthand macros.
