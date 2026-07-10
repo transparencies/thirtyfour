@@ -129,6 +129,28 @@
 //! [`WebElement::wait_until`]: extensions::query::ElementWaitable::wait_until
 //! [`query`]: extensions::query
 //!
+//! ### Prefer stable selectors
+//!
+//! When you control the application under test, give important elements stable
+//! `data-testid` hooks and select them with [`By::Testid`]:
+//!
+//! ```no_run
+//! # use thirtyfour::prelude::*;
+//! # async fn example(driver: &WebDriver) -> WebDriverResult<()> {
+//! let save_button = driver
+//!     .query(By::Testid("settings-save"))
+//!     .desc("settings save button")
+//!     .single()
+//!     .await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Prefer app-owned test IDs first, then stable semantic CSS selectors. Match
+//! visible text when the copy itself is part of the behavior under test, and
+//! use XPath only when CSS cannot reasonably express the target. Examples
+//! against third-party sites must use the stable selectors those sites expose.
+//!
 //! ### Components
 //!
 //! Components allow you to wrap a web component using smart element resolvers that can

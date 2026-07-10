@@ -20,7 +20,7 @@ Suppose your page contains a search form:
 ```html
 <form id="search-form">
     <input type="text" id="search-input" />
-    <button type="submit">Search</button>
+    <button type="submit" data-testid="search-submit">Search</button>
 </form>
 ```
 
@@ -34,7 +34,7 @@ pub struct SearchForm {
     base: WebElement,                              // The <form> itself.
     #[by(id = "search-input")]
     input: ElementResolver<WebElement>,            // The <input>.
-    #[by(css = "button[type='submit']")]
+    #[by(testid = "search-submit", description = "search submit button")]
     submit: ElementResolver<WebElement>,           // The <button>.
 }
 

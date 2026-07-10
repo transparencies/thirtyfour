@@ -13,7 +13,7 @@ Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI 
 - All W3C WebDriver and WebElement methods supported
 - Create new browser session directly via WebDriver (e.g. chromedriver)
 - Create new browser session via Selenium Standalone or Grid
-- Find elements (via all common selectors e.g. Id, Class, CSS, Tag, XPath)
+- Find elements (via all common selectors e.g. Testid, Id, Class, CSS, Tag, XPath)
 - Send keys to elements, including key-combinations
 - Execute Javascript
 - Action Chains
@@ -94,6 +94,27 @@ async fn main() -> WebDriverResult<()> {
      Ok(())
 }
 ```
+
+### Prefer stable selectors
+
+When you control the application under test, give important elements stable
+`data-testid` hooks and select them with `By::Testid`:
+
+```rust
+let save_button = driver
+    .query(By::Testid("settings-save"))
+    .desc("settings save button")
+    .single()
+    .await?;
+```
+
+Prefer app-owned test IDs first, then stable semantic CSS selectors. Match
+visible text when the copy itself is part of the behavior you are testing, and
+use XPath only when CSS cannot reasonably express the target. The Wikipedia
+example above uses the stable selectors that third-party page actually exposes.
+
+See the [Element Queries](https://stevepryde.github.io/thirtyfour/features/queries.html)
+chapter for the full selector guidance.
 
 ## Minimum Supported Rust Version
 
