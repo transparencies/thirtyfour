@@ -31,7 +31,9 @@ Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI 
 
 - `rustls-tls`: (Default) Use rustls to provide TLS support (via reqwest).
 - `native-tls`: Use native TLS (via reqwest).
-- `component`: (Default) Enable the `Component` derive macro (via thirtyfour_macros).
+- `component`: (Default) Enable the `Component` derive macro (via
+  thirtyfour_macros) and export `Component` / `ElementResolver` from the
+  prelude.
 - `cdp`: (Default) Typed Chrome DevTools Protocol commands.
 - `cdp-events`: WebSocket-backed CDP event subscription.
 - `bidi`: WebDriver BiDi (W3C) — typed commands and event subscription
