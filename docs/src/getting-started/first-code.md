@@ -73,6 +73,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 ```
 
+> **Selector note:** Wikipedia is a third-party site, so this example uses the
+> stable IDs, element types, and classes that the real page exposes. In an app
+> you control, add stable `data-testid` hooks to important controls and prefer
+> `By::Testid`:
+>
+> ```rust
+> let save_button = driver
+>     .query(By::Testid("settings-save"))
+>     .desc("settings save button")
+>     .single()
+>     .await?;
+> ```
+>
+> See [Element Queries](../features/queries.md#choosing-stable-selectors) for
+> the selector priority and guidance on text matching and XPath.
+
 Make sure Chrome is installed, then run:
 
     cargo run

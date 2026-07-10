@@ -70,6 +70,28 @@ an element with the id of `search-form`. The `query()` method polls until the el
 `desc()` gives the query a readable name if it times out. Calling `single()` also checks our page
 contract: exactly one search form should match this selector.
 
+### Choosing A Stable Selector
+
+When you control the application under test, add stable `data-testid` hooks to
+important controls and prefer `By::Testid`:
+
+```rust
+let save_button = driver
+    .query(By::Testid("settings-save"))
+    .desc("settings save button")
+    .single()
+    .await?;
+```
+
+If there is no app-owned test ID, use a stable semantic CSS selector next.
+Match visible text when the wording itself is part of the behavior you need to
+verify, not as the default identity of a control: copy changes, localization,
+and duplicate labels can otherwise break the test. Use XPath only when CSS
+cannot reasonably express the target.
+
+Wikipedia does not provide test IDs for this flow, so the walkthrough uses the
+stable selectors that the real third-party page exposes.
+
 > If you actually navigate to [https://wikipedia.org](https://wikipedia.org) and open your browser's
 > devtools (F12 in most browsers), then go to the `Inspector` tab, you will see the raw HTML for
 > the page. In the search box at the top of the inspector, if you type `#search-form`
