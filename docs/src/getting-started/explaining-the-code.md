@@ -58,11 +58,17 @@ Next, we tell the browser to navigate to Wikipedia:
 And then we look for an element on the page:
 
 ```rust
-    let elem_form = driver.find(By::Id("search-form")).await?;
+    let elem_form = driver
+        .query(By::Id("search-form"))
+        .desc("Wikipedia search form")
+        .single()
+        .await?;
 ```
 
 We search for elements using what we call a `selector` or `locator`. In this case we are looking for
-an element with the id of `search-form`.
+an element with the id of `search-form`. The `query()` method polls until the element appears, and
+`desc()` gives the query a readable name if it times out. Calling `single()` also checks our page
+contract: exactly one search form should match this selector.
 
 > If you actually navigate to [https://wikipedia.org](https://wikipedia.org) and open your browser's
 > devtools (F12 in most browsers), then go to the `Inspector` tab, you will see the raw HTML for
@@ -74,11 +80,16 @@ This is the container element that contains both the input field and the button 
 But we want to type into the field, so we need to do another query:
 
 ```rust
-    let elem_text = elem_form.find(By::Id("searchInput")).await?;
+    let elem_text = elem_form
+        .query(By::Id("searchInput"))
+        .desc("Wikipedia search input")
+        .single()
+        .await?;
 ```
 
-And again, if you search in the inspector for `#searchInput` you get an `<input />` element
-which is the one we want to type into.
+This query starts from `elem_form`, so it only searches inside the form's subtree. If you search in
+the inspector for `#searchInput` you get an `<input />` element, which is the one we want to type
+into.
 
 ## Typing Text Into An Element
 
@@ -94,7 +105,11 @@ Now we need to find the search button and click it. Finding the element means do
 query:
 
 ```rust
-    let elem_button = elem_form.find(By::Css("button[type='submit']")).await?;
+    let elem_button = elem_form
+        .query(By::Css("button[type='submit']"))
+        .desc("Wikipedia search button")
+        .single()
+        .await?;
 ```
 
 This time we use a `CSS` selector to locate a `<button>` element with an attribute `type` that
@@ -123,27 +138,33 @@ cases where you are forced to use this approach, but it should be a last resort.
 from a website testing perspective, it probably also means a human is going to be unsure of when
 the page has actually finished loading, and this is an indicator of a poor user experience.
 
-Instead, we usually want to look for an element on the page and wait until that element is visible.
+Instead, we usually want to look for an element on the page and wait until that element appears.
 
 ```rust
-driver.query(By::ClassName("firstHeading")).first().await?;
+driver
+    .query(By::ClassName("firstHeading"))
+    .desc("Wikipedia article heading")
+    .single()
+    .await?;
 assert_eq!(driver.title().await?, "Selenium - Wikipedia");
 ```
 
 ## Better Element Queries
 
-To have `thirtyfour` "wait" until an element has loaded, we use the `query()` method which provides
-a "builder" interface for constructing more flexible queries. Again, this uses one of the `By`
-selectors, and we tell it to return only the first matching element.
+To have `thirtyfour` wait until an element appears, we use the `query()` method, which provides a
+builder interface for constructing flexible queries. Again, this uses one of the `By` selectors.
+The `single()` terminator expresses that the selector must match exactly one element; use `first()`
+instead when choosing the first of several matches is intentional.
 
-The `query()` method will poll every half-second until it finds the element. If it cannot find the
-element within 30 seconds, it will timeout and return an error. The polling time and timeout duration
-can be changed using `WebDriverConfig`, or you can also override them for a given query.
+By default, `query()` polls every half-second for up to 20 seconds. If no element matches, it times
+out and returns an error that includes the selector and any description added with `desc()`. The
+polling time and timeout duration can be changed using `WebDriverConfig`, or overridden for a given
+query.
 
 The `query()` method is the recommended way to search for elements. The `find()` and `find_all()`
-methods exist only for compatibility with the webdriver spec. The `query()` method uses these
-under the hood, but adds polling and other niceties on top, including giving you more details about
-your query if an element was not found.
+methods are lower-level, one-shot operations shaped like the WebDriver specification. Use them when
+one immediate lookup is deliberate. For everyday automation, `query()` adds polling and other
+niceties, including more detail when an element was not found.
 
 See the [`ElementQuery`](https://docs.rs/thirtyfour/latest/thirtyfour/extensions/query/struct.ElementQuery.html)
 documentation for more details on the kinds of queries it supports.
