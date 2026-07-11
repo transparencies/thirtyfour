@@ -117,3 +117,8 @@ Make sure Firefox is installed, and re-run:
 If everything worked correctly, you should have seen the Wikipedia page open up on Firefox this time.
 
 Congratulations! You successfully automated a web browser.
+
+Before building a larger suite, copy the short
+[Reliable AI-Generated Tests](./reliable-tests.md) checklist into your coding-agent
+instructions or project guidance. It captures the reliability rules used by this
+example and links to the deeper documentation for each one.
