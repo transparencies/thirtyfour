@@ -3,9 +3,9 @@
 ## Purpose
 
 This specification owns the reliability contract for entry-level `thirtyfour`
-examples and selector guidance that humans and coding agents are likely to
-copy. It does not define the later AI quickstart, recipe, harness, or debugging
-work ordered in [`todo.md`](../todo.md).
+examples, selector guidance, and coding-agent guidance that humans and agents
+are likely to copy. It does not define the later AI quickstart, recipe, harness,
+or debugging work ordered in [`todo.md`](../todo.md).
 
 ## Requirements
 
@@ -42,6 +42,17 @@ work ordered in [`todo.md`](../todo.md).
   selectors the real page exposes rather than pretending app-owned test hooks
   exist. The surrounding guidance must distinguish this constraint from the
   preferred practice for applications the reader controls.
+- **AI-STYLE-001 (confirmed):** The mdBook must provide one concise checklist
+  of reliability rules suitable for pasting into coding-agent instructions.
+- **AI-STYLE-002 (confirmed):** The checklist must cover session setup and
+  cleanup, query semantics and diagnostics, stable selectors, readiness waits,
+  query scoping and components, session concurrency, and protocol-specific
+  isolation and feature gates.
+- **AI-STYLE-003 (confirmed):** Every major checklist rule must link to the
+  deeper documentation that defines its behavior and must not claim that a
+  planned API, such as the managed test harness, already exists.
+- **AI-STYLE-004 (confirmed):** The checklist must be linked directly from the
+  getting-started learning path.
 
 ## Acceptance criteria
 
@@ -66,3 +77,8 @@ work ordered in [`todo.md`](../todo.md).
   AI-SEL-003.
 - **AC-007:** The component documentation contains a concrete `testid` resolver
   example. Covers AI-SEL-001.
+- **AC-008:** A standalone mdBook page contains a copyable checklist covering
+  all AI-STYLE-002 topics without duplicating the deeper guides. Covers
+  AI-STYLE-001 through AI-STYLE-003.
+- **AC-009:** The mdBook summary and first-code page link to the checklist.
+  Covers AI-STYLE-004.

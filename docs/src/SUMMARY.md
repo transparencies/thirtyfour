@@ -6,6 +6,7 @@
 - [Installation](./getting-started/installation.md)
 - [Your First Browser Automation Code](./getting-started/first-code.md)
 - [Explaining The Code](./getting-started/explaining-the-code.md)
+- [Reliable AI-Generated Tests](./getting-started/reliable-tests.md)
 - [Feature Flags](./getting-started/feature-flags.md)
 # Feature Documentation
 - [Element Queries](./features/queries.md)
