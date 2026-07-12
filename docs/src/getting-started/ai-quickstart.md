@@ -1,0 +1,112 @@
+# AI/LLM Quickstart
+
+Use this page as the compact source of truth when asking an AI coding tool to
+write `thirtyfour` automation. It keeps the reliable defaults in one place and
+links to the deeper documentation when a task needs more detail.
+
+## Minimal Setup
+
+```toml
+[dependencies]
+thirtyfour = "THIRTYFOUR_CRATE_VERSION"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+The default `thirtyfour` features include the local
+[`WebDriver::managed`](../features/manager.md) setup used below. Use
+[`WebDriver::new` or `WebDriver::builder`](../appendix/manual-webdriver.md)
+instead when a remote Selenium or Grid service owns the driver process.
+Install Chrome before running the test; the manager downloads a matching
+`chromedriver` automatically on first use.
+
+## Starter Test
+
+This example is marked `no_run` because `example.test` represents your
+application and cannot be exercised as written.
+
+```rust,no_run
+use thirtyfour::prelude::*;
+
+#[tokio::test]
+async fn saves_profile_settings() -> WebDriverResult<()> {
+    let mut caps = DesiredCapabilities::chrome();
+    caps.set_headless()?;
+    let driver = WebDriver::managed(caps).await?;
+
+    // Keep the test result so quit() is attempted even when an assertion or
+    // browser command fails.
+    let test_result: WebDriverResult<()> = async {
+        driver.goto("https://example.test/settings").await?;
+
+        let form = driver
+            .query(By::Testid("profile-settings"))
+            .desc("profile settings form")
+            .single()
+            .await?;
+
+        form.query(By::Testid("display-name"))
+            .desc("display name input")
+            .single()
+            .await?
+            .send_keys("Ada")
+            .await?;
+
+        let save_button = form
+            .query(By::Testid("save-profile"))
+            .desc("save profile button")
+            .single()
+            .await?;
+        save_button.wait_until().clickable().await?;
+        save_button.click().await?;
+
+        // Assert the user-visible outcome. This query polls until the saved
+        // state appears, so it replaces a brittle fixed sleep.
+        driver
+            .query(By::Testid("settings-status"))
+            .with_text("Saved")
+            .and_displayed()
+            .desc("saved settings status")
+            .single()
+            .await?;
+
+        Ok(())
+    }
+    .await;
+
+    let quit_result = driver.quit().await;
+    test_result?;
+    quit_result
+}
+```
+
+## Rules For Generated Automation
+
+- Prefer app-owned `By::Testid` selectors, then stable semantic CSS. Match
+  visible text when the copy is the behavior under test; use XPath only when
+  CSS cannot reasonably express the target.
+- Use `query()` for normal lookup, `.single()` when uniqueness is a page
+  contract, and `.desc(...)` on important user-facing elements.
+- Never use a fixed sleep for readiness. Poll for the required state with
+  `query()` or use `wait_until()` on an element you already have.
+- Scope queries through a container or Component, and assert a user-visible
+  outcome rather than only checking that a click returned successfully.
+- Explicitly quit every session. Do not run independent concurrent flows
+  through clones of the same `WebDriver`.
+
+The copyable [Reliable AI-Generated Tests](./reliable-tests.md) checklist is the
+review gate for generated code. Apply it before accepting a test.
+
+## Deeper Documentation
+
+- [Element Queries](../features/queries.md) — stable selectors, descriptions,
+  filters, scoping, cardinality, and intentional one-shot `find()` calls.
+- [Waiting For Element Changes](../features/waiting.md) — state waits for an
+  element that has already been located.
+- [Components](../features/components.md) — reusable UI areas with private
+  selectors and resilient element resolution.
+- [WebDriver Manager](../features/manager.md) — local driver downloads,
+  process lifetime, configuration, and separate sessions.
+- [Chrome DevTools Protocol](../cdp/overview.md) — Chromium-only typed commands
+  and optional event support.
+- [WebDriver BiDi](../bidi/overview.md) — cross-browser bidirectional commands
+  and events, with feature and capability opt-in.

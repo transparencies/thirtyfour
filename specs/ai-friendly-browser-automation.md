@@ -3,16 +3,17 @@
 ## Purpose
 
 This specification owns the reliability contract for entry-level `thirtyfour`
-examples, selector guidance, and coding-agent guidance that humans and agents
-are likely to copy. It does not define the later AI quickstart, recipe, harness,
-or debugging work ordered in [`todo.md`](../todo.md).
+examples, selector guidance, the AI/LLM quickstart, and coding-agent guidance
+that humans and agents are likely to copy. It does not define the later recipe,
+harness, or debugging work ordered in [`todo.md`](../todo.md).
 
 ## Requirements
 
 - **AI-AUTO-001 (confirmed):** Entry-level examples that manage a local browser
   must use `WebDriver::managed`; an example specifically teaching an external
-  Selenium endpoint may use `WebDriver::new`. Every flow must explicitly call
-  `driver.quit().await?`.
+  Selenium endpoint may use `WebDriver::new`. Every flow must explicitly await
+  `driver.quit()` and propagate its error when no earlier flow error takes
+  precedence.
 - **AI-AUTO-002 (confirmed):** Normal element lookup in entry-level examples
   must use `WebDriver::query` or `WebElement::query`, so lookup polls for the
   required page state instead of making a one-shot request.
@@ -53,6 +54,19 @@ or debugging work ordered in [`todo.md`](../todo.md).
   planned API, such as the managed test harness, already exists.
 - **AI-STYLE-004 (confirmed):** The checklist must be linked directly from the
   getting-started learning path.
+- **AI-QS-001 (confirmed):** The mdBook must provide one compact AI/LLM
+  quickstart with minimal dependencies and a starter test using
+  `WebDriver::managed`, `query()`, readable descriptions, explicit readiness
+  conditions, a user-visible outcome, and explicit session cleanup.
+- **AI-QS-002 (confirmed):** The starter test must prefer app-owned test IDs,
+  scoped queries, and a cleanup shape that still attempts `quit()` after the
+  test body fails. A sample URL that is not runnable must be marked `no_run`.
+- **AI-QS-003 (confirmed):** The quickstart must give direct selector,
+  readiness, scoping, outcome, cleanup, and concurrency rules, while linking
+  to the canonical reliability checklist rather than duplicating it.
+- **AI-QS-004 (confirmed):** The quickstart must link to the query, waiting,
+  component, manager, CDP, and BiDi guides and be part of the mdBook
+  getting-started navigation.
 
 ## Acceptance criteria
 
@@ -82,3 +96,13 @@ or debugging work ordered in [`todo.md`](../todo.md).
   AI-STYLE-001 through AI-STYLE-003.
 - **AC-009:** The mdBook summary and first-code page link to the checklist.
   Covers AI-STYLE-004.
+- **AC-010:** A standalone AI/LLM quickstart contains the minimal dependency
+  block and compile-checked or `no_run` starter test required by AI-QS-001 and
+  AI-QS-002.
+- **AC-011:** The starter test waits for an interactable control, asserts a
+  user-visible result without a fixed sleep, and attempts explicit cleanup on
+  both success and failure. Covers AI-QS-001 and AI-QS-002.
+- **AC-012:** The quickstart contains concise prescriptive rules and links to
+  the canonical review checklist plus every deeper guide named by AI-QS-004.
+- **AC-013:** The mdBook summary links the quickstart from Getting Started.
+  Covers AI-QS-004.
