@@ -5,6 +5,7 @@
 # Getting Started
 - [Installation](./getting-started/installation.md)
 - [Your First Browser Automation Code](./getting-started/first-code.md)
+- [AI/LLM Quickstart](./getting-started/ai-quickstart.md)
 - [Explaining The Code](./getting-started/explaining-the-code.md)
 - [Reliable AI-Generated Tests](./getting-started/reliable-tests.md)
 - [Feature Flags](./getting-started/feature-flags.md)
