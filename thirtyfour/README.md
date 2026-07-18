@@ -7,6 +7,10 @@
 
 Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI testing.
 
+Documentation is available as the [Thirtyfour book](https://stevepryde.github.io/thirtyfour/),
+[llms.txt](https://stevepryde.github.io/thirtyfour/llms.txt), and
+[llms-full.txt](https://stevepryde.github.io/thirtyfour/llms-full.txt).
+
 
 ## Features
 
