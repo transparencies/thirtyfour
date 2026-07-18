@@ -88,7 +88,7 @@ reqwest = { version = "0.13", default-features = false, features = [
 ], optional = true }
 
 # Optional WebSocket client for the `cdp-events` and `bidi` features.
-tokio-tungstenite = { version = "0.29", default-features = false, features = [
+tokio-tungstenite = { version = "0.30", default-features = false, features = [
     "connect",
     "rustls-tls-webpki-roots",
 ], optional = true }
