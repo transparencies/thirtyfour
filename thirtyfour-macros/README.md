@@ -9,7 +9,7 @@ For more information, see the [crate documentation](https://docs.rs/thirtyfour-m
 
 ## Minimum Supported Rust Version
 
-The MSRV for `thirtyfour-macros` is 1.57.
+The MSRV for `thirtyfour-macros` is 1.88.
 
 ## LICENSE
 
@@ -19,4 +19,3 @@ You can choose either license if you use this work.
 See the NOTICE file for more details.
 
 `SPDX-License-Identifier: MIT OR Apache-2.0`
-
