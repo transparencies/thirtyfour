@@ -29,6 +29,7 @@
 //!   details.
 //! - Powerful query interface (the recommended way to find elements) with explicit waits and various predicates
 //! - Component Wrappers (similar to `Page Object Model`)
+//! - Error- and unwind-aware browser-test cleanup via [`testing::run_browser_test`]
 //!
 //! ## Feature Flags
 //!
@@ -272,6 +273,8 @@ pub mod manager;
 pub mod session;
 /// Miscellaneous support functions for `thirtyfour` tests.
 pub mod support;
+/// Helpers for running reliable browser tests.
+pub mod testing;
 
 mod js;
 mod switch_to;

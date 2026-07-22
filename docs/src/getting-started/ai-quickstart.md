@@ -25,17 +25,16 @@ This example is marked `no_run` because `example.test` represents your
 application and cannot be exercised as written.
 
 ```rust,no_run
-use thirtyfour::prelude::*;
+use thirtyfour::{
+    prelude::*,
+    testing::{BrowserTestError, run_browser_test},
+};
 
 #[tokio::test]
-async fn saves_profile_settings() -> WebDriverResult<()> {
+async fn saves_profile_settings() -> Result<(), BrowserTestError> {
     let mut caps = DesiredCapabilities::chrome();
     caps.set_headless()?;
-    let driver = WebDriver::managed(caps).await?;
-
-    // Keep the test result so quit() is attempted even when an assertion or
-    // browser command fails.
-    let test_result: WebDriverResult<()> = async {
+    run_browser_test(WebDriver::managed(caps), |driver| async move {
         driver.goto("https://example.test/settings").await?;
 
         let form = driver
@@ -70,12 +69,8 @@ async fn saves_profile_settings() -> WebDriverResult<()> {
             .await?;
 
         Ok(())
-    }
-    .await;
-
-    let quit_result = driver.quit().await;
-    test_result?;
-    quit_result
+    })
+    .await
 }
 ```
 
@@ -90,8 +85,10 @@ async fn saves_profile_settings() -> WebDriverResult<()> {
   `query()` or use `wait_until()` on an element you already have.
 - Scope queries through a container or Component, and assert a user-visible
   outcome rather than only checking that a click returned successfully.
-- Explicitly quit every session. Do not run independent concurrent flows
-  through clones of the same `WebDriver`.
+- Prefer `run_browser_test` in tests so asynchronous cleanup still runs after
+  early errors and panicking assertions. Otherwise explicitly quit every
+  session. Do not run independent concurrent flows through clones of the same
+  `WebDriver`.
 
 The copyable [Reliable AI-Generated Tests](./reliable-tests.md) checklist is the
 review gate for generated code. Apply it before accepting a test.
