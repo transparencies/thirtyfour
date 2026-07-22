@@ -98,6 +98,8 @@ review gate for generated code. Apply it before accepting a test.
 
 ## Deeper Documentation
 
+- [Task-Oriented Recipes](../recipes/index.md) — copyable starting points for
+  common application flows, browser contexts, diagnostics, CDP, and BiDi.
 - [Element Queries](../features/queries.md) — stable selectors, descriptions,
   filters, scoping, cardinality, and intentional one-shot `find()` calls.
 - [Waiting For Element Changes](../features/waiting.md) — state waits for an
