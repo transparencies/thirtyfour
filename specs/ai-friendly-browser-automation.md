@@ -3,9 +3,9 @@
 ## Purpose
 
 This specification owns the reliability contract for entry-level `thirtyfour`
-examples, selector guidance, the AI/LLM quickstart, and coding-agent guidance
-that humans and agents are likely to copy. It does not define the later recipe,
-harness, or debugging work ordered in [`todo.md`](../todo.md).
+examples, selector guidance, the AI/LLM quickstart, task-oriented recipes, and
+coding-agent guidance that humans and agents are likely to copy. It does not
+define the later harness or debugging work ordered in [`todo.md`](../todo.md).
 
 ## Requirements
 
@@ -67,6 +67,27 @@ harness, or debugging work ordered in [`todo.md`](../todo.md).
 - **AI-QS-004 (confirmed):** The quickstart must link to the query, waiting,
   component, manager, CDP, and BiDi guides and be part of the mdBook
   getting-started navigation.
+- **AI-REC-001 (confirmed):** The mdBook must provide a dedicated recipes
+  section with copyable, task-shaped examples for login, search, HTML modal or
+  dialog interaction, iframes, shadow DOM, file uploads, screenshots on
+  failure, table or list assertions, browser and driver logs, a simple CDP
+  network or cache command, and a basic BiDi event subscription.
+- **AI-REC-002 (confirmed):** Every recipe must use `WebDriver::managed` unless
+  an external WebDriver service is essential, use polling queries and element
+  waits for readiness, describe important queries, prefer stable selectors,
+  and explicitly attempt session cleanup.
+- **AI-REC-003 (confirmed):** Each recipe must be short enough to copy and
+  adapt, use cardinality that matches the intended page contract, and assert a
+  user-visible or protocol-visible outcome instead of treating a successful
+  click as sufficient evidence.
+- **AI-REC-004 (confirmed):** Recipes that depend on an application, local
+  browser, filesystem fixture, or optional protocol feature must be marked
+  `no_run` and state the required setup or feature gate. Recipes must not use a
+  fixed sleep for page readiness.
+- **AI-REC-005 (confirmed):** Protocol-specific recipes must keep portable
+  WebDriver flow separate from Chromium-only CDP and opt-in BiDi behavior, and
+  link to the deeper owning guides rather than duplicating their full API
+  references.
 
 ## Acceptance criteria
 
@@ -106,3 +127,13 @@ harness, or debugging work ordered in [`todo.md`](../todo.md).
   the canonical review checklist plus every deeper guide named by AI-QS-004.
 - **AC-013:** The mdBook summary links the quickstart from Getting Started.
   Covers AI-QS-004.
+- **AC-014:** A Recipes section in the mdBook navigation contains all eleven
+  task categories required by AI-REC-001. The examples are complete,
+  independently copyable tests or programs, or clearly identify shared setup.
+- **AC-015:** Every recipe is compile-checked or marked `no_run`, contains no
+  fixed sleep, uses the recommended selector/query/wait shape where elements
+  are involved, and explicitly attempts `driver.quit()` after its task result.
+  Covers AI-REC-002 through AI-REC-004.
+- **AC-016:** The logging, CDP, and BiDi recipes identify browser limitations,
+  feature flags, and capability opt-ins and link to their deeper documentation.
+  Covers AI-REC-005.
