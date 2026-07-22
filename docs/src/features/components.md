@@ -64,15 +64,45 @@ A few things are happening here:
 - Each `#[by(...)]` field is an `ElementResolver`. It doesn't query
   anything until you call `.resolve()`, and it caches the result so
   subsequent calls don't hit WebDriver again.
-- Resolvers always search relative to `base`, so a `SearchForm` can
-  only ever find elements inside its own `<form>`. That scoping is one
-  of the big wins over scattered `driver.query(...)` calls — you can't
-  accidentally match elements from a different form on the page.
+- Resolver queries start from `base`, so components normally stay scoped
+  to their own subtree. XPath is the exception: an expression beginning
+  with `//` is document-rooted. Use `.//` when an XPath resolver must stay
+  inside the component.
+
+## Component Shape And Generated API
+
+`Component` can only be derived for a struct with named fields. The struct
+must contain exactly one base `WebElement`:
+
+```rust
+#[derive(Debug, Clone, Component)]
+pub struct Dialog {
+    #[base]
+    root: WebElement,
+}
+```
+
+A field named `base` is detected automatically. Use `#[base]` when the
+field has another name. Do not use both forms in the same struct; the
+derive rejects multiple base fields. The base field type must be
+`WebElement` (either imported or written as `thirtyfour::WebElement`).
+
+For each component, the derive generates:
+
+- `pub fn new(base: WebElement) -> Self`;
+- `From<WebElement>`, which delegates to `new`;
+- the `Component` trait implementation, including `base_element()`.
+
+Fields with `#[by(...)]` become element resolvers. Other fields are
+initialised with `Default::default()`, so each such field type must implement
+`Default`. A `#[cfg(...)]` attribute on a field is preserved in the generated
+constructor, allowing feature- or target-specific resolver and state fields.
 
 ## The `#[by(...)]` Attribute
 
-Every resolver field needs a `#[by(...)]` attribute. The first part
-picks the selector:
+Every resolver field needs one `#[by(...)]` attribute. Use either exactly
+one selector or one custom resolver. Selector and `description` values must
+be string literals.
 
 | Attribute                | Selector used          |
 | ------------------------ | ---------------------- |
@@ -86,27 +116,60 @@ picks the selector:
 | `partial_link = "..."`   | `By::PartialLinkText`  |
 | `testid = "..."`         | `By::Testid`           |
 
-Pair the selector with extra options, comma-separated. Which options
-apply depends on whether the resolver is single or multi (the macro
-infers that from the field type — `ElementResolver<T>` is single,
-`ElementResolver<Vec<T>>` is multi):
+All selectors start a query from the component's base element. For XPath,
+remember that `//div` searches from the document root while `.//div` searches
+within the base element.
 
-| Option                     | Applies to | Effect                                                    |
-| -------------------------- | ---------- | --------------------------------------------------------- |
-| `single`                   | single     | Match exactly one element. Errors if 0 or 2+. Default.    |
-| `first`                    | single     | Match the first element instead.                          |
-| `not_empty`                | multi      | Match at least one element. Errors if empty. Default.     |
-| `allow_empty`              | multi      | Match zero or more elements. Empty Vec is OK.             |
-| `description = "..."`      | both       | Attach a label that shows up in timeout error messages.   |
-| `wait(timeout_ms = N, interval_ms = N)` | both | Override the poll cadence for this field.            |
-| `nowait`                   | both       | Try once without polling.                                 |
-| `ignore_errors`            | both       | Forward `ignore_errors` to the underlying query.          |
-| `multi`                    | multi      | Force multi-resolver behaviour. Only needed for custom type aliases. |
-| `custom = my_resolver_fn`  | both       | Use a custom resolver function (see [Custom Resolvers](#custom-resolvers)). Mutually exclusive with the other options. |
+### Resolver Types And Cardinality
+
+Built-in selector resolvers can return `WebElement`, a nested `Component`, or
+a `Vec` of either. The macro infers single- versus multi-element behaviour from
+the field type:
+
+| Field type                        | Inferred mode | Default cardinality |
+| --------------------------------- | ------------- | ------------------- |
+| `ElementResolver<T>`              | single        | exactly one         |
+| `ElementResolver<Vec<T>>`         | multi         | one or more         |
+| `ElementResolverSingle`           | single        | exactly one         |
+| `ElementResolverMulti`            | multi         | one or more         |
+| user-defined resolver type alias   | single        | use `multi` to force multi mode |
+
+Here, `T` is either `WebElement` or a type implementing `Component + Clone`.
+Nested components are constructed from each matched `WebElement` through
+their generated `From<WebElement>` implementation.
+
+`ElementResolver<Vec<T>>` is detected through the normal `ElementResolver`,
+`components::ElementResolver`, and `thirtyfour::components::ElementResolver`
+paths. If a type alias hides the `Vec`, add the `multi` option. The convenience
+alias `ElementResolverMulti` is also detected when used directly.
+
+### Query Options
+
+Pair a selector with options, separated by commas:
+
+| Option                                      | Applies to | Effect |
+| ------------------------------------------- | ---------- | ------ |
+| `single`                                    | single     | Require exactly one match. This is the default. |
+| `first`                                     | single     | Return the first match instead of requiring uniqueness. |
+| `not_empty`                                 | multi      | Require one or more matches. This is the default. |
+| `allow_empty`                               | multi      | Return all matches, including an empty `Vec`. |
+| `multi`                                     | multi      | Force multi mode when a type alias hides `Vec<T>`. |
+| `description = "..."`                       | both       | Include a human-readable label in query errors. |
+| `ignore_errors`                             | both       | Ignore query errors while polling and keep trying until the timeout. |
+| `wait(timeout_ms = N, interval_ms = N)`     | both       | Override both the polling timeout and interval. Both arguments are required. |
+| `nowait`                                    | both       | Poll once instead of waiting. |
+
+The default mode uses the query system's default polling configuration.
+`single` and `first` are mutually exclusive, as are `not_empty` and
+`allow_empty`, and `wait(...)` and `nowait`. Single-only options cannot be
+used for a multi resolver, and multi-only options cannot be used for a single
+resolver. The derive also rejects repeated options and multiple selectors.
 
 Examples:
 
 ```rust
+type LinkListResolver = ElementResolver<Vec<WebElement>>;
+
 // Use the first match if there are several.
 #[by(id = "search-input", first)]
 input: ElementResolver<WebElement>,
@@ -119,6 +182,10 @@ items: ElementResolver<Vec<WebElement>>,
 #[by(css = ".loading-spinner", description = "loading spinner",
      wait(timeout_ms = 60_000, interval_ms = 1_000))]
 spinner: ElementResolver<WebElement>,
+
+// A custom alias that contains ElementResolver<Vec<WebElement>>.
+#[by(partial_link = "Guide", multi, allow_empty)]
+guide_links: LinkListResolver,
 ```
 
 ## ElementResolver Methods
@@ -224,7 +291,7 @@ Fields without a `#[by(...)]` attribute are initialised via
 extra boilerplate:
 
 ```rust
-#[derive(Debug, Clone, Component, Default)]
+#[derive(Debug, Clone, Component)]
 pub struct LoginForm {
     base: WebElement,
     #[by(id = "username")]
@@ -257,10 +324,30 @@ pub struct Header {
 }
 ```
 
-A custom resolver receives the component's base element and returns a
-`WebDriverResult<T>` matching the field's type. `custom = ...` is
-mutually exclusive with the selector and modifier options — the
-function is doing all of that work itself.
+A custom resolver receives the component's base element by value and returns
+a `WebDriverResult<T>` matching the field's `ElementResolver<T>` type. Pass a
+function path or another compatible expression, not a quoted string:
+
+```rust
+// Assume Row is another Component.
+async fn resolve_rows(base: WebElement) -> WebDriverResult<Vec<Row>> {
+    let elements = base.query(By::Css("tbody > tr")).all_from_selector().await?;
+    Ok(elements.into_iter().map(Row::from).collect())
+}
+
+#[derive(Debug, Clone, Component)]
+pub struct Table {
+    base: WebElement,
+    #[by(custom = resolve_rows)]
+    rows: ElementResolver<Vec<Row>>,
+}
+```
+
+The resolver function owns the complete lookup policy, including cardinality,
+polling, filtering, and error handling. Therefore `custom = ...` cannot be
+combined with a selector or any other `#[by(...)]` option. Single and `Vec`
+field types are still inferred normally; do not add `multi` to a custom
+resolver.
 
 ## When To Reach For A Component
 

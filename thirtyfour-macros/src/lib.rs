@@ -18,116 +18,108 @@ macro_rules! bail {
 
 pub(crate) use bail;
 
-/// Derive macro for a wrapped `Component`.
+/// Derive macro for a wrapped [`Component`].
 ///
-/// A `Component` contains a base [`WebElement`] from which all element queries will be performed.
+/// A component owns a base [`WebElement`]. Its [`ElementResolver`] fields lazily query from that
+/// element and cache their results. Queries normally stay within the base element's subtree;
+/// XPath expressions beginning with `//` are document-rooted, so use `.//` for a relative XPath.
 ///
-/// All elements in the component are descendents of the base element (or at least the
-/// starting point for an element query, since XPath queries can access parent nodes).
+/// ## Supported structs and generated API
 ///
-/// Components perform element lookups via [`ElementResolver`]s, which lazily perform an
-/// element query to resolve a [`WebElement`], and then cache the result for later access.
+/// The derive supports non-generic structs with named fields. Exactly one field must be the base
+/// `WebElement`. A field named `base` is detected automatically; use `#[base]` to give it another
+/// name. Multiple base fields, tuple structs, enums, and unions are not supported.
 ///
-/// See the [`ElementResolver`] documentation for more details.
+/// The derive generates:
 ///
-/// ## Attributes
+/// - `pub fn new(base: WebElement) -> Self`;
+/// - `From<WebElement>`;
+/// - the [`Component`] implementation and its `base_element()` method.
 ///
-/// ### `#[base]`
-/// By default, the base element should be named `base` and be of type `WebElement`.
-/// You can optionally use the `#[base]` attribute if you wish to name the base element
-/// something other than `base`.
-/// If you use this attribute, you cannot also have another
-/// element named `base`.
+/// A field without `#[by(...)]` is initialized with `Default::default()`. Its type must therefore
+/// implement `Default`. A field-level `#[cfg(...)]` is preserved in the generated constructor.
 ///
-/// ### `#[by(..)]`
-/// Components use the `#[by(..)]` attribute to specify all the details of the query.
+/// ## Selectors
 ///
-/// The only required attribute is the selector attribute, which can be one of the following:
-/// - `id = "..."`: Select element by id.
-/// - `tag = "..."`: Select element by tag name.
-/// - `link = "..."`: Select element by link text.
-/// - `partial_link = "..."`: Select element by partial link text.
-/// - `css = "..."`: Select element by CSS.
-/// - `xpath = "..."`: Select element by XPath.
-/// - `name = "..."`: Select element by name.
-/// - `class = "..."`: Select element by class name.
-/// - `testid = "..."`: Select element by `data-testid`.
+/// A normal resolver requires exactly one selector with a string-literal value:
 ///
-/// Optional attributes available within `#[by(..)]` include:
-/// - `single`: (default, single element only) Return `NoSuchElement` if the number of elements
-///   found is != 1.
-/// - `first`: (single element only) Select the first element that matches the query.
-///   By default, a query will return `NoSuchElement` if multiple elements match.
-///   This default is designed to catch instances where a query is not specific enough.
-/// - `not_empty`: (default, multi elements only) Return `NoSuchElement` if no elements were found.
-/// - `allow_empty`: (multi elements only) Return an empty Vec if no elements were found.
-///   By default a multi-element query will return `NoSuchElement` if no
-///   elements were found.
-/// - `description = "..."`: Set the element description to be displayed in `NoSuchElement` errors.
-/// - `allow_errors`: Ignore errors such as stale elements while polling.
-/// - `wait(timeout_ms = 10000, interval_ms=500)`: Override the default polling options.
-/// - `nowait`: Turn off polling for this element query.
-/// - `custom = "my_resolve_fn"`: Use the specified function to resolve the element or component.
-///   **NOTE**: The `custom` attribute cannot be specified with any other
-///   attribute.
+/// | Attribute | Generated selector |
+/// | --- | --- |
+/// | `id = "..."` | `By::Id` |
+/// | `tag = "..."` | `By::Tag` |
+/// | `link = "..."` | `By::LinkText` |
+/// | `partial_link = "..."` | `By::PartialLinkText` |
+/// | `css = "..."` | `By::Css` |
+/// | `xpath = "..."` | `By::XPath` |
+/// | `name = "..."` | `By::Name` |
+/// | `class = "..."` | `By::ClassName` |
+/// | `testid = "..."` | `By::Testid` |
 ///
-/// See [`ElementQueryOptions`] for more details on how each option is used.
+/// ## Resolver type and cardinality
 ///
-/// ### Custom resolver functions
+/// `ElementResolver<T>` and `ElementResolverSingle` use single mode, which requires exactly one
+/// match by default. `ElementResolver<Vec<T>>` and the unqualified `ElementResolverMulti` alias
+/// use multi mode, which requires at least one match by default. Here `T` may be `WebElement` or
+/// a nested type that implements `Component + Clone`.
 ///
-/// When using `custom = "my_resolve_fn"`, your function signature should look something like this:
+/// The `Vec` is detected for `ElementResolver`, `components::ElementResolver`, and
+/// `thirtyfour::components::ElementResolver` paths. If a user-defined type alias hides the `Vec`,
+/// add `multi` to force multi mode.
+///
+/// ## Query options
+///
+/// Selector resolvers accept these comma-separated options:
+///
+/// | Option | Mode | Behavior |
+/// | --- | --- | --- |
+/// | `single` | single | Require exactly one match. This is the default. |
+/// | `first` | single | Return the first match instead of requiring uniqueness. |
+/// | `not_empty` | multi | Require one or more matches. This is the default. |
+/// | `allow_empty` | multi | Return all matches, including an empty `Vec`. |
+/// | `multi` | multi | Force multi mode when a type alias hides `Vec<T>`. |
+/// | `description = "..."` | both | Add a human-readable label to query errors. |
+/// | `ignore_errors` | both | Ignore query errors while polling and keep trying. |
+/// | `wait(timeout_ms = N, interval_ms = N)` | both | Override the polling timeout and interval; both arguments are required. |
+/// | `nowait` | both | Poll once without waiting. |
+///
+/// The derive rejects repeated options and incompatible combinations. In particular, `single`
+/// and `first`, `not_empty` and `allow_empty`, and `wait(...)` and `nowait` are mutually
+/// exclusive. Single-only and multi-only options must match the inferred resolver mode.
+///
+/// ## Custom resolvers
+///
+/// Use `custom = expression` instead of a selector to supply a compatible [`ElementQueryFn`]. A
+/// custom resolver receives the base `WebElement` by value and returns `WebDriverResult<T>`, where
+/// `T` matches the field's `ElementResolver<T>` type. Pass a function path or another expression,
+/// not a quoted string. `custom` cannot be combined with a selector or any other option.
+///
+/// ## Example
 ///
 /// ```ignore
-/// async fn my_resolve_fn(elem: &WebElement) -> WebDriverResult<T>
-/// ```
-///
-/// where the `T` is the same as type `T` in `ElementResolver<T>`.
-/// Also see the example below.
-///
-/// ## Example:
-/// ```ignore
-/// /// This component shows how to nest components inside others.
-/// #[derive(Debug, Clone, Component)]
-/// pub struct CheckboxSectionComponent {
-///     base: WebElement,
-///     #[by(tag = "label", allow_empty)]
-///     boxes: ElementResolver<Vec<CheckboxComponent>>,
-///     // Other fields will be initialised using `Default::default()`.
-///     my_field: bool,
+/// async fn resolve_button(base: WebElement) -> WebDriverResult<WebElement> {
+///     base.query(By::ClassName("run-button")).and_displayed().first().await
 /// }
 ///
-/// /// This component shows how to wrap a simple web component.
 /// #[derive(Debug, Clone, Component)]
-/// pub struct CheckboxComponent {
-///     base: WebElement,
+/// pub struct FormComponent {
+///     #[base]
+///     root: WebElement,
 ///     #[by(css = "input[type='checkbox']", first)]
-///     input: ElementResolver<WebElement>,
-///     #[by(name = "text-label", description = "text label")]
-///     label: ElementResolver<WebElement>
-///     #[by(custom = "my_custom_resolve_fn")]
-///     button: ElementResolver<WebElement>
-/// }
-///
-/// /// Use this function signature for your custom resolvers.
-/// async fn my_custom_resolve_fn(elem: &WebElement) -> WebDriverResult<WebElement> {
-///     // Do something with elem.
-///     elem.query(By::ClassName("my-class")).and_displayed().first().await
-/// }
-///
-/// impl CheckboxComponent {
-///     /// Return true if the checkbox is ticked.
-///     pub async fn is_ticked(&self) -> WebDriverResult<bool> {
-///         // Equivalent to: let elem = self.input.resolve_present().await?;
-///         let elem = resolve_present!(self.input);
-///         let prop = elem.prop("checked").await?;
-///         Ok(prop.unwrap_or_default() == "true")
-///     }
+///     checkbox: ElementResolver<WebElement>,
+///     #[by(partial_link = "Help", description = "help link")]
+///     help: ElementResolver<WebElement>,
+///     #[by(tag = "label", allow_empty)]
+///     labels: ElementResolver<Vec<WebElement>>,
+///     #[by(custom = resolve_button)]
+///     button: ElementResolver<WebElement>,
+///     attempts: u32,
 /// }
 /// ```
+///
+/// [`Component`]: https://docs.rs/thirtyfour/latest/thirtyfour/components/trait.Component.html
+/// [`ElementQueryFn`]: https://docs.rs/thirtyfour/latest/thirtyfour/common/types/trait.ElementQueryFn.html
+/// [`ElementResolver`]: https://docs.rs/thirtyfour/latest/thirtyfour/components/struct.ElementResolver.html
 /// [`WebElement`]: https://docs.rs/thirtyfour/latest/thirtyfour/struct.WebElement.html
-/// [`ElementResolver`]: https://docs.rs/thirtyfour/0.31.0-alpha.1/thirtyfour/components/struct.ElementResolver.html
-/// [`ElementQueryOptions`]: https://docs.rs/thirtyfour/0.31.0-alpha.1/thirtyfour/extensions/query/struct.ElementQueryOptions.html
-/// [`ElementQueryFn<T>`]: https://docs.rs/thirtyfour/0.31.0-alpha.1/thirtyfour/common/types/type.ElementQueryFn.html
 #[proc_macro_derive(Component, attributes(base, by))]
 pub fn derive_component_fn(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
