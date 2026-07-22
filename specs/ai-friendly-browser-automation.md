@@ -5,8 +5,9 @@
 This specification owns the reliability contract for entry-level `thirtyfour`
 examples, selector guidance, the AI/LLM quickstart, task-oriented recipes, and
 translation guidance, and coding-agent guidance that humans and agents are
-likely to copy. It also defines the browser-test runner and portable failure
-artifacts; it does not define the later page-snapshot work ordered in
+likely to copy. It also defines the browser-test runner, portable failure
+artifacts, and the interaction-helper design boundary; it does not define the
+later page-snapshot work ordered in
 [`todo.md`](../todo.md).
 
 ## Requirements
@@ -150,6 +151,20 @@ artifacts; it does not define the later page-snapshot work ordered in
 - **AI-ART-004 (confirmed):** Documentation must warn that bounded artifacts
   can still contain secrets or personal data and require application-specific
   disabling or redaction before external upload.
+- **AI-INT-001 (confirmed):** The canonical interaction flow must remain an
+  explicit sequence of described query, deliberate cardinality, readiness,
+  action, and user-visible outcome.
+- **AI-INT-002 (confirmed):** Fresh targets use query readiness filters, while
+  intentionally held targets use `wait_until()`. Documentation must define
+  clickable as displayed plus enabled rather than a complete interactability
+  guarantee.
+- **AI-INT-003 (confirmed):** This design adds no generic click-and-type API.
+  Selector-only helpers would hide cardinality, diagnostics, timeout, clearing,
+  stale-element, retry, or outcome semantics, while a builder exposing those
+  choices would duplicate `ElementQuery` without a stronger safety guarantee.
+- **AI-INT-004 (confirmed):** Reusable interaction abstractions belong in
+  application-specific Component intent methods, where their semantics and
+  expected outcome are known.
 
 ## Acceptance criteria
 
@@ -229,3 +244,10 @@ artifacts; it does not define the later page-snapshot work ordered in
   attachment before a test body, capture before runner cleanup, browser and
   manager limitations, portable-protocol scope, and privacy guidance. Covers
   AI-ART-003 and AI-ART-004.
+- **AC-025:** Waiting documentation contains copyable click and text-entry
+  patterns and explains both fresh-query and held-element readiness paths.
+  Covers AI-INT-001 and AI-INT-002.
+- **AC-026:** Waiting documentation names interactability, stale-element,
+  clearing, retry, and outcome limitations and records the no-new-generic-API
+  decision. Existing quickstart and recipe flows remain explicit. Covers
+  AI-INT-003 and AI-INT-004.

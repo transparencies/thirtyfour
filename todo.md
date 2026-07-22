@@ -38,7 +38,7 @@ flows and examples.
 - [x] [#338 Consider exporting common component ergonomics from the prelude](https://github.com/stevepryde/thirtyfour/issues/338)
 - [x] [#334 Add a managed test harness helper that guarantees browser cleanup](https://github.com/stevepryde/thirtyfour/issues/334)
 - [x] [#335 Add first-class failure artifact helpers for browser tests](https://github.com/stevepryde/thirtyfour/issues/335)
-- [ ] [#337 Explore high-level safe interaction helpers built on query and waits](https://github.com/stevepryde/thirtyfour/issues/337)
+- [x] [#337 Explore high-level safe interaction helpers built on query and waits](https://github.com/stevepryde/thirtyfour/issues/337)
 
 ## 5. Advanced AI/Debugging Capability
 

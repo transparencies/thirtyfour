@@ -15,6 +15,84 @@ button.wait_until().not_displayed().await?;
 `ElementWaiter` that polls the element until either a predicate
 matches or the timeout elapses.
 
+## Keep Interactions Explicit
+
+For a fresh target, put readiness on a described query, choose cardinality,
+perform the action, and then query for the user-visible outcome:
+
+```rust,no_run
+use thirtyfour::prelude::*;
+
+async fn save_settings(driver: &WebDriver) -> WebDriverResult<()> {
+    let save = driver
+        .query(By::Testid("settings-save"))
+        .and_clickable()
+        .desc("settings save button")
+        .single()
+        .await?;
+
+    save.click().await?;
+
+    driver
+        .query(By::Testid("settings-saved"))
+        .and_displayed()
+        .with_text("Settings saved")
+        .desc("settings saved confirmation")
+        .single()
+        .await?;
+    Ok(())
+}
+```
+
+For an element you already resolved and intentionally want to keep, wait on
+that element before acting:
+
+```rust,no_run
+# use thirtyfour::prelude::*;
+# async fn submit(save: WebElement) -> WebDriverResult<()> {
+save.wait_until().clickable().await?;
+save.click().await?;
+# Ok(())
+# }
+```
+
+Text entry has application-specific replacement semantics, so make the choice
+to clear or append visible in the code:
+
+```rust,no_run
+use thirtyfour::prelude::*;
+
+async fn replace_email(driver: &WebDriver) -> WebDriverResult<()> {
+    let email = driver
+        .query(By::Testid("account-email"))
+        .and_displayed()
+        .and_enabled()
+        .desc("account email input")
+        .single()
+        .await?;
+
+    email.clear().await?;
+    email.send_keys("ada@example.test").await?;
+    Ok(())
+}
+```
+
+Here, “clickable” means displayed and enabled. It cannot guarantee that an
+overlay will not intercept the click, that the DOM will not replace the
+element, or that page state will not change between the readiness check and the
+action. A held element can become stale; re-query when re-rendering is expected,
+or keep the selector in an [`ElementResolver`](./components.md#elementresolver-methods)
+inside a Component.
+
+Selector-only helpers such as `driver.click(selector)` or
+`clear_and_type(selector, text)` would hide cardinality, descriptions, timeout,
+clearing, stale-element handling, and the expected outcome. A builder exposing
+those choices would duplicate `ElementQuery` without providing a stronger
+safety guarantee, so this design adds no new generic interaction API. Retrying
+clicks automatically can also repeat a non-idempotent action. Put repeated
+application behavior in a Component intent method such as `save_settings()` or
+`submit_credentials()`, where those choices and the outcome are known.
+
 ## Built-In Predicates
 
 State predicates polled directly via WebDriver:
