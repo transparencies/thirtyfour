@@ -5,8 +5,8 @@
 This specification owns the reliability contract for entry-level `thirtyfour`
 examples, selector guidance, the AI/LLM quickstart, task-oriented recipes, and
 translation guidance, and coding-agent guidance that humans and agents are
-likely to copy. It also defines the browser-test session runner; it does not
-define the later failure-artifact or snapshot work ordered in
+likely to copy. It also defines the browser-test runner and portable failure
+artifacts; it does not define the later page-snapshot work ordered in
 [`todo.md`](../todo.md).
 
 ## Requirements
@@ -131,6 +131,25 @@ define the later failure-artifact or snapshot work ordered in
 - **AI-RUN-004 (confirmed):** The AI quickstart and reliable-test checklist
   must use the runner as the preferred test shape, while application examples
   may continue to call `quit()` directly.
+- **AI-ART-001 (confirmed):** The crate must provide one canonical,
+  best-effort failure-artifact collector for current URL, page title,
+  screenshot bytes, page source, browser logs, and managed-driver-process logs.
+  Failure to capture one field must not prevent attempts for the remaining
+  fields.
+- **AI-ART-002 (confirmed):** Source and log text must have configurable,
+  UTF-8-safe hard bounds with conservative defaults. Log retention must prefer
+  the newest entries, and the text report must never print screenshot bytes or
+  base64 data.
+- **AI-ART-003 (confirmed):** The collector must attach before the failing body
+  to observe live managed-driver-process logs and capture before session
+  cleanup. Process logs must be documented as potentially containing lines
+  from another concurrent session when the manager reuses a process. Browser
+  logging capability requirements, unsupported drivers, the `manager` feature
+  boundary, and the portable baseline's exclusion of CDP/BiDi-specific
+  diagnostics must be explicit.
+- **AI-ART-004 (confirmed):** Documentation must warn that bounded artifacts
+  can still contain secrets or personal data and require application-specific
+  disabling or redaction before external upload.
 
 ## Acceptance criteria
 
@@ -202,3 +221,11 @@ define the later failure-artifact or snapshot work ordered in
   behavior, and managed/remote session compatibility; the AI quickstart and
   reliability checklist use that API in compile-checked examples. Covers
   AI-RUN-004.
+- **AC-023:** Deterministic tests verify independent capture after an endpoint
+  failure, disabled fields issuing no requests, UTF-8-safe source truncation,
+  newest-entry log bounds, and a display report that exposes screenshot size
+  but not screenshot contents. Covers AI-ART-001 and AI-ART-002.
+- **AC-024:** Public rustdoc and the diagnostics recipe show collector
+  attachment before a test body, capture before runner cleanup, browser and
+  manager limitations, portable-protocol scope, and privacy guidance. Covers
+  AI-ART-003 and AI-ART-004.
