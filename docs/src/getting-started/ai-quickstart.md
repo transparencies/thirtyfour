@@ -89,6 +89,9 @@ async fn saves_profile_settings() -> Result<(), BrowserTestError> {
   early errors and panicking assertions. Otherwise explicitly quit every
   session. Do not run independent concurrent flows through clones of the same
   `WebDriver`.
+- On an error path, call `FailureArtifactCollector::capture()` before
+  cleanup for bounded, best-effort URL, title, screenshot, source, and log
+  context. See the diagnostics recipe for capability and feature limits.
 
 The copyable [Reliable AI-Generated Tests](./reliable-tests.md) checklist is the
 review gate for generated code. Apply it before accepting a test.
@@ -108,6 +111,8 @@ review gate for generated code. Apply it before accepting a test.
   selectors and resilient element resolution.
 - [WebDriver Manager](../features/manager.md) — local driver downloads,
   process lifetime, configuration, and separate sessions.
+- [Failure Artifacts And Logs](../recipes/diagnostics.md) — bounded portable
+  failure context suitable for CI and AI-assisted debugging.
 - [Chrome DevTools Protocol](../cdp/overview.md) — Chromium-only typed commands
   and optional event support.
 - [WebDriver BiDi](../bidi/overview.md) — cross-browser bidirectional commands

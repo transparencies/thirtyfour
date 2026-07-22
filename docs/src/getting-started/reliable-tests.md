@@ -15,6 +15,8 @@ instructions:
 - Scope queries through a container element; use Components for repeated UI areas.
 - Prefer run_browser_test(...) in tests; otherwise explicitly call
   driver.quit().await? when the session is finished.
+- On failure, capture bounded diagnostics before cleanup with
+  FailureArtifactCollector rather than dumping unbounded page source.
 - Do not share one WebDriver session across independent concurrent flows. A shared
   WebDriverManager may launch separate sessions for parallel tests.
 - Keep CDP and BiDi code isolated from portable WebDriver flows. Gate optional
@@ -99,3 +101,11 @@ Error precedence is explicit:
 The first argument accepts any future that creates a `WebDriver`, so the same
 runner works with `WebDriver::managed(...)`, `WebDriver::builder(...)`, and
 `WebDriver::new(...)`.
+
+For CI diagnostics, attach
+[`FailureArtifactCollector`](https://docs.rs/thirtyfour/latest/thirtyfour/testing/struct.FailureArtifactCollector.html)
+before the test body and call `capture()` on the error path before the
+runner cleans up. Each artifact succeeds or fails independently, source and log
+text are hard-bounded by default, and the display report never prints PNG bytes.
+See [Failure Artifacts And Logs](../recipes/diagnostics.md) for the complete
+pattern and browser/feature limitations.

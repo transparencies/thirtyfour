@@ -33,6 +33,11 @@
 //! [`WebDriver`]: crate::WebDriver
 //! [`WebDriver::quit`]: crate::WebDriver::quit
 
+mod artifacts;
 mod runner;
 
+pub use artifacts::{
+    Artifact, ArtifactUnavailable, BrowserLogArtifact, DriverProcessLogArtifact,
+    FailureArtifactCollector, FailureArtifactConfig, FailureArtifacts, LogLimits, SourceExcerpt,
+};
 pub use runner::{BrowserTestError, run_browser_test};
