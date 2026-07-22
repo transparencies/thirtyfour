@@ -13,7 +13,8 @@ instructions:
   DOM-position chains, and XPath when stable CSS can express the target.
 - Never use a fixed sleep for page readiness. Wait with query() or wait_until().
 - Scope queries through a container element; use Components for repeated UI areas.
-- Explicitly call driver.quit().await? when the session is finished.
+- Prefer run_browser_test(...) in tests; otherwise explicitly call
+  driver.quit().await? when the session is finished.
 - Do not share one WebDriver session across independent concurrent flows. A shared
   WebDriverManager may launch separate sessions for parallel tests.
 - Keep CDP and BiDi code isolated from portable WebDriver flows. Gate optional
@@ -53,3 +54,48 @@ instructions:
 Treat these as review rules, not merely generation hints: generated code should
 not be accepted until its selectors, waits, cleanup, concurrency, and feature
 gates satisfy the same checklist.
+
+## Cleanup That Survives Test Failures
+
+Use [`run_browser_test`](https://docs.rs/thirtyfour/latest/thirtyfour/testing/fn.run_browser_test.html)
+as the default test shape:
+
+```rust,no_run
+use thirtyfour::{
+    prelude::*,
+    testing::{BrowserTestError, run_browser_test},
+};
+
+#[tokio::test]
+async fn page_has_heading() -> Result<(), BrowserTestError> {
+    run_browser_test(
+        WebDriver::managed(DesiredCapabilities::chrome()),
+        |driver| async move {
+            driver.goto("https://example.com").await?;
+            driver.query(By::Css("h1")).single().await?;
+            Ok(())
+        },
+    )
+    .await
+}
+```
+
+The runner keeps its own session handle, passes a clone to the test body, and
+awaits `quit()` after success, an early `?` return, or a panicking assertion.
+After a panic it resumes the original panic; if cleanup also fails, the cleanup
+error is written through `tracing`. `panic = "abort"` cannot run cleanup.
+The runner future must be allowed to finish: cancelling or aborting its task can
+interrupt asynchronous cleanup.
+
+Error precedence is explicit:
+
+| Test body | `quit()` | Result |
+|-----------|----------|--------|
+| succeeds | succeeds | body value |
+| fails | succeeds | `BrowserTestError::Body` |
+| succeeds | fails | `BrowserTestError::Cleanup` |
+| fails | fails | `BrowserTestError::BodyAndCleanup` with both errors |
+
+The first argument accepts any future that creates a `WebDriver`, so the same
+runner works with `WebDriver::managed(...)`, `WebDriver::builder(...)`, and
+`WebDriver::new(...)`.

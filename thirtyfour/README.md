@@ -31,6 +31,7 @@ If you are porting existing automation, start with the
 - WebDriver BiDi (W3C bidirectional protocol) — typed commands and event subscription cross-browser, opt-in via the `bidi` feature
 - Powerful query interface (the recommended way to find elements) with explicit waits and various predicates
 - Component Wrappers (similar to `Page Object Model`)
+- Browser-test runner that attempts asynchronous cleanup on errors and panics
 
 ## Feature Flags
 
@@ -99,6 +100,12 @@ async fn main() -> WebDriverResult<()> {
      Ok(())
 }
 ```
+
+For test functions, prefer
+[`run_browser_test`](https://docs.rs/thirtyfour/latest/thirtyfour/testing/fn.run_browser_test.html).
+It attempts `driver.quit().await` after successful tests, early error returns,
+and panicking assertions, and preserves both errors when the test and cleanup
+fail. Call `quit()` directly for application flows that do not use the runner.
 
 ### Prefer stable selectors
 

@@ -5,8 +5,9 @@
 This specification owns the reliability contract for entry-level `thirtyfour`
 examples, selector guidance, the AI/LLM quickstart, task-oriented recipes, and
 translation guidance, and coding-agent guidance that humans and agents are
-likely to copy. It does not define the later harness or debugging work ordered
-in [`todo.md`](../todo.md).
+likely to copy. It also defines the browser-test session runner; it does not
+define the later failure-artifact or snapshot work ordered in
+[`todo.md`](../todo.md).
 
 ## Requirements
 
@@ -115,6 +116,21 @@ in [`todo.md`](../todo.md).
 - **AI-COMP-003 (confirmed):** Component rustdoc, mdBook guidance, examples,
   and tests must use the preferred import style and describe its `component`
   feature gate consistently.
+- **AI-RUN-001 (confirmed):** The crate must provide one browser-test runner
+  that accepts managed and externally created session futures, retains control
+  of cleanup, and asynchronously attempts `WebDriver::quit` after the body
+  succeeds, returns an error, or unwinds with a panic.
+- **AI-RUN-002 (confirmed):** Session setup, body, and cleanup failures must be
+  distinguishable. When the body and cleanup both fail, the returned error must
+  retain both failures rather than allowing cleanup to replace the test error.
+- **AI-RUN-003 (confirmed):** After catching an unwind panic, the runner must
+  attempt cleanup and resume the original panic. Documentation must state that
+  `panic = "abort"` cannot provide this cleanup guarantee and that a cleanup
+  failure or panic during unwind is reported through tracing. It must also
+  state that cancelling the runner future can interrupt asynchronous cleanup.
+- **AI-RUN-004 (confirmed):** The AI quickstart and reliable-test checklist
+  must use the runner as the preferred test shape, while application examples
+  may continue to call `quit()` directly.
 
 ## Acceptance criteria
 
@@ -177,3 +193,12 @@ in [`todo.md`](../todo.md).
   resolver macros use explicit root imports. Crate rustdoc, mdBook Component
   guidance, the playground example, and Component integration tests show the
   same import contract. Covers AI-COMP-001 through AI-COMP-003.
+- **AC-021:** Deterministic tests exercise successful setup/body/cleanup,
+  setup failure without body execution, body-only failure, cleanup-only
+  failure, simultaneous body and cleanup failure, and panics during body
+  construction and polling, including cleanup failure or panic during a body
+  panic. Covers AI-RUN-001 through AI-RUN-003.
+- **AC-022:** Public rustdoc defines runner ownership, error precedence, panic
+  behavior, and managed/remote session compatibility; the AI quickstart and
+  reliability checklist use that API in compile-checked examples. Covers
+  AI-RUN-004.
