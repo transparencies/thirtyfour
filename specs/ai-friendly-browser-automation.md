@@ -4,8 +4,9 @@
 
 This specification owns the reliability contract for entry-level `thirtyfour`
 examples, selector guidance, the AI/LLM quickstart, task-oriented recipes, and
-coding-agent guidance that humans and agents are likely to copy. It does not
-define the later harness or debugging work ordered in [`todo.md`](../todo.md).
+translation guidance, and coding-agent guidance that humans and agents are
+likely to copy. It does not define the later harness or debugging work ordered
+in [`todo.md`](../todo.md).
 
 ## Requirements
 
@@ -88,6 +89,21 @@ define the later harness or debugging work ordered in [`todo.md`](../todo.md).
   WebDriver flow separate from Chromium-only CDP and opt-in BiDi behavior, and
   link to the deeper owning guides rather than duplicating their full API
   references.
+- **AI-TRANS-001 (confirmed):** The mdBook must map Selenium element lookup,
+  explicit waits, page objects, Grid setup, and local browser setup to the
+  corresponding `thirtyfour` query, waiter, Component, remote-session, and
+  managed-session APIs.
+- **AI-TRANS-002 (confirmed):** The mdBook must map Playwright locators,
+  auto-waiting, and browser-context habits to scoped queries, explicit
+  readiness conditions, and isolated WebDriver sessions without implying that
+  a cloned `WebDriver` creates a separate browser context.
+- **AI-TRANS-003 (confirmed):** The translation guide must explicitly name
+  common Selenium and Playwright APIs that `thirtyfour` does not provide and
+  show side-by-side source and Rust examples where the mapping benefits from
+  code.
+- **AI-TRANS-004 (confirmed):** The guide must link to the canonical query,
+  waiting, Component, manager, manual WebDriver, and reliable-test guidance and
+  be discoverable from the mdBook navigation and AI quickstart.
 
 ## Acceptance criteria
 
@@ -137,3 +153,11 @@ define the later harness or debugging work ordered in [`todo.md`](../todo.md).
 - **AC-016:** The logging, CDP, and BiDi recipes identify browser limitations,
   feature flags, and capability opt-ins and link to their deeper documentation.
   Covers AI-REC-005.
+- **AC-017:** A standalone translation guide covers every Selenium and
+  Playwright concept in AI-TRANS-001 and AI-TRANS-002 and uses `thirtyfour`
+  APIs that exist in the current tree.
+- **AC-018:** The guide includes source-to-Rust examples for lookup, waits,
+  scoped targets, Components, and local or remote sessions, plus a dedicated
+  table of common nonexistent APIs. Covers AI-TRANS-003.
+- **AC-019:** The mdBook summary and AI quickstart link to the translation
+  guide, which links onward to each deeper guide in AI-TRANS-004.

@@ -10,7 +10,8 @@ Thirtyfour is a Selenium / WebDriver library for Rust, for automated website UI 
 Documentation is available as the [Thirtyfour book](https://stevepryde.github.io/thirtyfour/),
 [llms.txt](https://stevepryde.github.io/thirtyfour/llms.txt), and
 [llms-full.txt](https://stevepryde.github.io/thirtyfour/llms-full.txt).
-
+If you are porting existing automation, start with the
+[Selenium and Playwright translation guide](https://stevepryde.github.io/thirtyfour/tools/selenium-playwright.html).
 
 ## Features
 
