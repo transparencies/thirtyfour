@@ -28,6 +28,7 @@
 - [BiDi Events](./bidi/events.md)
 # Useful Tools
 - [Selenium](./tools/selenium.md)
+- [Translating Selenium And Playwright](./tools/selenium-playwright.md)
 # Contributing
 - [Running Tests For Thirtyfour](./contributing/testing.md)
 # Appendix

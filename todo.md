@@ -28,7 +28,7 @@ These expand the quickstart into task-shaped material and translation help for
 people or agents coming from other browser automation ecosystems.
 
 - [x] [#332 Add task-oriented browser automation recipes to the book](https://github.com/stevepryde/thirtyfour/issues/332)
-- [ ] [#333 Add Selenium and Playwright translation guide for thirtyfour patterns](https://github.com/stevepryde/thirtyfour/issues/333)
+- [x] [#333 Add Selenium and Playwright translation guide for thirtyfour patterns](https://github.com/stevepryde/thirtyfour/issues/333)
 
 ## 4. API Ergonomics
 
