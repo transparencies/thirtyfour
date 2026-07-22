@@ -249,7 +249,7 @@ These names are common translation mistakes, especially in generated code:
 | `page.locator(...)` / `driver.locator(...)` | `driver.query(...)` or `element.query(...)` |
 | `get_by_role`, `get_by_label`, `get_by_text` | `By::Testid`, stable semantic CSS, or a strong selector plus a text filter |
 | `expect(locator).to_be_visible()` | Query with `and_displayed()` or call `element.wait_until().displayed()` |
-| `locator.click()` with hidden auto-waiting | Query with `and_clickable()`, or wait explicitly before `WebElement::click()` |
+| `locator.click()` with hidden auto-waiting | Query with `and_clickable()`, or call `WebElement::click_when_ready()` on a deliberately held element |
 | `browser.new_context()` | A separate `WebDriver` session, or deliberate cookie/storage cleanup |
 | Selenium `WebDriverWait` / `ExpectedConditions` types | `query()` filters and `wait_until()` predicates |
 | Selenium `ActionChains` spelling | `driver.action_chain()` and the `ActionChain` API |

@@ -1,9 +1,10 @@
 # Waiting For Element Changes
 
-`ElementQuery` waits for an element to *appear*. `ElementWaiter` waits
-for an element you already have to reach a particular state — visible,
-clickable, gone, with certain text, etc. Reach for it whenever you've
-clicked something and need the page to settle before you continue.
+`ElementQuery` repeatedly evaluates selectors and filters, including when you
+need all matching elements to disappear. `ElementWaiter` watches an element you
+already have until it reaches a particular state — visible, clickable, stale,
+with certain text, and so on. Reach for it whenever you've clicked something
+and need the held element to change before you continue.
 
 ```rust
 let button = driver.query(By::Css(".save")).single().await?;
@@ -50,11 +51,15 @@ that element before acting:
 ```rust,no_run
 # use thirtyfour::prelude::*;
 # async fn submit(save: WebElement) -> WebDriverResult<()> {
-save.wait_until().clickable().await?;
-save.click().await?;
+save.click_when_ready().await?;
 # Ok(())
 # }
 ```
+
+`click_when_ready()` is the common two-step sequence
+`wait_until().clickable().await?` followed by `click().await`. Keeping the
+readiness helper on a resolved object preserves the selector and cardinality
+choices made when that object was found.
 
 Text entry has application-specific replacement semantics, so make the choice
 to clear or append visible in the code:
@@ -84,13 +89,17 @@ action. A held element can become stale; re-query when re-rendering is expected,
 or keep the selector in an [`ElementResolver`](./components.md#elementresolver-methods)
 inside a Component.
 
-Selector-only helpers such as `driver.click(selector)` or
+Selector-taking helpers such as `driver.click(selector)` or
 `clear_and_type(selector, text)` would hide cardinality, descriptions, timeout,
 clearing, stale-element handling, and the expected outcome. A builder exposing
 those choices would duplicate `ElementQuery` without providing a stronger
-safety guarantee, so this design adds no new generic interaction API. Retrying
-clicks automatically can also repeat a non-idempotent action. Put repeated
-application behavior in a Component intent method such as `save_settings()` or
+safety guarantee, so there is no selector-taking generic interaction API.
+Resolved objects can still provide concise helpers for unambiguous common
+sequences: `WebElement::click_when_ready()` and the same-named
+`ElementResolver<WebElement>` methods keep their resolution behavior explicit
+in the receiver type. Retrying clicks automatically can repeat a non-idempotent
+action, so these helpers do not retry the click itself. Put repeated application
+behavior in a Component intent method such as `save_settings()` or
 `submit_credentials()`, where those choices and the outcome are known.
 
 ## Built-In Predicates
@@ -109,9 +118,9 @@ State predicates polled directly via WebDriver:
 | `.not_clickable().await?`   | hidden or disabled                           |
 | `.stale().await?`           | detached from the DOM                        |
 
-`.stale()` is especially useful right after a click — it lets you wait
-for the element you just acted on to disappear before assuming the
-next page is loaded.
+`.stale()` is especially useful right after a click: it waits for the concrete
+remote element you acted on to detach. It does not prove that navigation or the
+next page has finished loading.
 
 ## Text, Class, Attribute, Property Waits
 
@@ -209,13 +218,22 @@ for `ElementQuery::with_filter()`.
 - **Looking for an element on the page?** Use [`ElementQuery`](./queries.md).
 - **Already have an element and waiting for it to change?** Use
   `ElementWaiter` (this chapter).
-- **Waiting for an element to disappear?** Either works.
-  `query(...).not_exists()` polls until the selector returns nothing;
-  `elem.wait_until().stale()` polls until *that specific element* is
-  detached.
+- **Waiting for an element to disappear?** Use
+  `query(...).wait_until_gone()` when no element may match the complete query;
+  use `elem.wait_until().stale()` when *that specific resolved element* must be
+  detached. Use `not_exists()` when you want the same query polling as a
+  boolean instead of a timeout error.
+
+The distinction matters during re-rendering. `stale()` succeeds when its one
+remote element ID detaches, even if a replacement matches the old selector.
+`wait_until_gone()` re-runs every selector and filter and keeps waiting while a
+replacement matches. Neither wait implies that a navigation or the next page
+has completed.
 
 ## API Reference
 
-For the full method list, see
+For the full method lists, see
+[`ElementQuery`](https://docs.rs/thirtyfour/latest/thirtyfour/extensions/query/struct.ElementQuery.html)
+and
 [`ElementWaiter`](https://docs.rs/thirtyfour/latest/thirtyfour/extensions/query/struct.ElementWaiter.html)
 on docs.rs.

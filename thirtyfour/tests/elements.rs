@@ -108,6 +108,31 @@ fn element_text(test_harness: TestHarness) -> WebDriverResult<()> {
 }
 
 #[rstest]
+fn element_click_when_ready(test_harness: TestHarness) -> WebDriverResult<()> {
+    let c = test_harness.driver();
+    block_on(async {
+        c.goto(sample_page_url()).await?;
+        c.find(By::Id("text-input2")).await?.send_keys("ready").await?;
+        c.execute(
+            "const button = document.getElementById('button-copy'); \
+             button.disabled = true; \
+             button.dataset.clicks = '0'; \
+             button.addEventListener('click', () => button.dataset.clicks = String(Number(button.dataset.clicks) + 1)); \
+             setTimeout(() => button.disabled = false, 100);",
+            vec![],
+        )
+        .await?;
+
+        let button = c.find(By::Id("button-copy")).await?;
+        button.click_when_ready().await?;
+
+        assert_eq!(c.find(By::Id("text-output")).await?.text().await?, "ready");
+        assert_eq!(button.attr("data-clicks").await?.as_deref(), Some("1"));
+        Ok(())
+    })
+}
+
+#[rstest]
 fn element_rect(test_harness: TestHarness) -> WebDriverResult<()> {
     let c = test_harness.driver();
     block_on(async {

@@ -111,8 +111,9 @@ the one that matches what you actually need:
 | `.all_from_selector_required().await?`  | Same, but errors if empty.                             |
 | `.any().await?`                         | Elements from every branch combined, possibly empty.   |
 | `.any_required().await?`                | Same, but errors if empty.                             |
-| `.exists().await?`                      | `bool` — does it exist?                                |
-| `.not_exists().await?`                  | `bool` — does it stay absent for the timeout?          |
+| `.exists().await?`                      | Waits for a match; returns `false` on timeout.          |
+| `.not_exists().await?`                  | Waits for no matches; returns `false` on timeout.       |
+| `.wait_until_gone().await?`             | Waits for no matches; timeout is an error.              |
 
 `.any()` and `.all_from_selector()` differ when you've used `.or()`:
 `.any()` runs every branch and returns the union of matches;
@@ -228,7 +229,30 @@ immediately):
 
 ```rust
 let exists = driver.query(By::Id("maybe")).nowait().exists().await?;
+let absent = driver.query(By::Id("maybe")).nowait().not_exists().await?;
 ```
+
+Each branch is attempted at most once with `.nowait()`. `exists()` may stop at
+the first matching branch; `not_exists()` must check every branch because all
+of them must be absent. Without `.nowait()`, `not_exists()` polls until the
+query has no matches and returns `false` if matches remain when polling ends.
+
+When disappearance is required rather than optional, use the error-returning
+form:
+
+```rust
+driver
+    .query(By::Testid("saving-indicator"))
+    .desc("saving indicator")
+    .wait_until_gone()
+    .await?;
+```
+
+“Gone” means no element currently matches any branch after that branch's
+filters in the query's source context. A replacement node that still matches
+keeps the query waiting. This returns immediately when the query is already
+absent and returns a `WebDriverError::Timeout` if any branch still matches at
+the deadline.
 
 The default poller is 20 seconds with 500ms intervals. To change it for
 the whole `WebDriver`, supply a custom `WebDriverConfig` — see

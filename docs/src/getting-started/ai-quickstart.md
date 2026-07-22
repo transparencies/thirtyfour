@@ -55,8 +55,7 @@ async fn saves_profile_settings() -> Result<(), BrowserTestError> {
             .desc("save profile button")
             .single()
             .await?;
-        save_button.wait_until().clickable().await?;
-        save_button.click().await?;
+        save_button.click_when_ready().await?;
 
         // Assert the user-visible outcome. This query polls until the saved
         // state appears, so it replaces a brittle fixed sleep.
