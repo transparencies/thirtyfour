@@ -8,7 +8,7 @@ use crate::components::Component;
 use crate::error::WebDriverResult;
 use crate::extensions::query::ElementQueryOptions;
 use crate::prelude::ElementQueryable;
-use crate::{By, DynElementQueryFn, ElementQueryFn, WebElement};
+use crate::{By, DynElementQueryFn, ElementQueryFn, TypingData, WebElement};
 
 /// Type alias for `ElementResolver<WebElement>`, for convenience.
 pub type ElementResolverSingle = ElementResolver<WebElement>;
@@ -156,6 +156,44 @@ impl<T: Resolve + Clone + 'static> ElementResolver<T> {
 }
 
 impl ElementResolver<WebElement> {
+    /// Resolve a present element and call [`WebElement::click()`] on it.
+    ///
+    /// This validates the cached element and re-runs the resolver first if it is stale.
+    pub async fn click(&self) -> WebDriverResult<()> {
+        self.resolve_present().await?.click().await
+    }
+
+    /// Resolve a present element and call [`WebElement::click_when_ready()`] on it.
+    ///
+    /// The click can still fail if, for example, the element becomes stale or another element
+    /// intercepts the click after the readiness check. This does not retry the click or wait for
+    /// an application outcome.
+    pub async fn click_when_ready(&self) -> WebDriverResult<()> {
+        self.resolve_present().await?.click_when_ready().await
+    }
+
+    /// Resolve a present element and call [`WebElement::clear()`] on it.
+    pub async fn clear(&self) -> WebDriverResult<()> {
+        self.resolve_present().await?.clear().await
+    }
+
+    /// Resolve a present element and forward the specified [`TypingData`] to
+    /// [`WebElement::send_keys()`].
+    pub async fn send_keys(&self, key: impl Into<TypingData>) -> WebDriverResult<()> {
+        self.resolve_present().await?.send_keys(key).await
+    }
+
+    /// Resolve a present element and return [`WebElement::text()`].
+    pub async fn text(&self) -> WebDriverResult<String> {
+        self.resolve_present().await?.text().await
+    }
+
+    /// Resolve a present element and return its optional `value` property from
+    /// [`WebElement::value()`].
+    pub async fn value(&self) -> WebDriverResult<Option<String>> {
+        self.resolve_present().await?.value().await
+    }
+
     /// Create a new element resolver that must return a single element.
     pub fn new_single(base_element: WebElement, by: By) -> Self {
         let resolver = move |elem: WebElement| {

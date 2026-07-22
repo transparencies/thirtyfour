@@ -339,10 +339,35 @@ impl ElementQuery {
         Ok(!elements.is_empty())
     }
 
-    /// Return true if no element matches any selector (including filters), otherwise false.
+    /// Poll until no element currently matches any selector branch after its filters, returning
+    /// whether the condition was met before the configured poller ended.
+    ///
+    /// With [`ElementQuery::nowait()`], every selector is checked exactly once and the result is
+    /// returned immediately.
     pub async fn not_exists(&self) -> WebDriverResult<bool> {
         let elements = self.run_poller(false, true).await?;
         Ok(elements.is_empty())
+    }
+
+    /// Wait until no element currently matches this complete query in its source context,
+    /// including every selector branch and its filters.
+    ///
+    /// This returns immediately if the query is already absent. If matching elements remain when
+    /// the configured poller ends, this returns [`WebDriverError::Timeout`]. A replacement node
+    /// that also matches keeps the query waiting. With [`ElementQuery::nowait()`], the query is
+    /// checked exactly once.
+    pub async fn wait_until_gone(&self) -> WebDriverResult<()> {
+        let elements = self.run_poller(false, true).await?;
+        if elements.is_empty() {
+            return Ok(());
+        }
+
+        let element_description =
+            get_elements_description(None, self.options.description.as_deref().unwrap_or_default());
+        Err(WebDriverError::Timeout(format!(
+            "timed out waiting for {element_description} to disappear using selectors: {}",
+            get_selector_summary(&self.selectors)
+        )))
     }
 
     /// Return the first WebElement that matches any selector (including filters).
@@ -465,8 +490,10 @@ impl ElementQuery {
         // Start the poller.
         let mut poller = self.poller.start();
 
-        let mut elements = IndexMap::new();
         loop {
+            // Each poll must reflect the query's current matches. In particular, absence checks
+            // must not retain an element that was found by an earlier poll.
+            let mut elements = IndexMap::new();
             for selector in &self.selectors {
                 let mut new_elements =
                     match self.fetch_elements_from_source(selector.by.clone()).await {
@@ -954,6 +981,7 @@ async fn _test_is_send() -> WebDriverResult<()> {
     let query = driver.query(By::Css("div"));
     is_send_val(&query.exists());
     is_send_val(&query.not_exists());
+    is_send_val(&query.wait_until_gone());
     is_send_val(&query.first());
     is_send_val(&query.all_from_selector());
     is_send_val(&query.all_from_selector_required());

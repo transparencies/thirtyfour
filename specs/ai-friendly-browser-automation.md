@@ -158,13 +158,22 @@ later page-snapshot work ordered in
   intentionally held targets use `wait_until()`. Documentation must define
   clickable as displayed plus enabled rather than a complete interactability
   guarantee.
-- **AI-INT-003 (confirmed):** This design adds no generic click-and-type API.
-  Selector-only helpers would hide cardinality, diagnostics, timeout, clearing,
-  stale-element, retry, or outcome semantics, while a builder exposing those
-  choices would duplicate `ElementQuery` without a stronger safety guarantee.
+- **AI-INT-003 (confirmed):** This design adds no selector-taking generic
+  click-and-type API. Selector-only helpers would hide cardinality,
+  diagnostics, timeout, clearing, stale-element, retry, or outcome semantics,
+  while a builder exposing those choices would duplicate `ElementQuery`
+  without a stronger safety guarantee. Narrow helpers on an already-resolved
+  `WebElement` or `ElementResolver<WebElement>` may compose common operations
+  without retrying the operation or waiting for its outcome.
 - **AI-INT-004 (confirmed):** Reusable interaction abstractions belong in
   application-specific Component intent methods, where their semantics and
   expected outcome are known.
+- **AI-INT-005 (confirmed):** Query absence is evaluated from current matches
+  across every selector branch and its filters, without retaining historical
+  matches. `not_exists()` returns a boolean when polling ends, while
+  `wait_until_gone()` returns a timeout error if matches remain. `nowait()`
+  performs one poll. Query absence is distinct from `stale()`, which watches
+  one concrete resolved element.
 
 ## Acceptance criteria
 
@@ -248,6 +257,12 @@ later page-snapshot work ordered in
   patterns and explains both fresh-query and held-element readiness paths.
   Covers AI-INT-001 and AI-INT-002.
 - **AC-026:** Waiting documentation names interactability, stale-element,
-  clearing, retry, and outcome limitations and records the no-new-generic-API
-  decision. Existing quickstart and recipe flows remain explicit. Covers
-  AI-INT-003 and AI-INT-004.
+  clearing, retry, and outcome limitations and records the
+  no-selector-taking-generic-API decision. Narrow held-element and resolver
+  helpers document that they do not retry operations or wait for outcomes.
+  Existing quickstart and recipe flows remain explicit. Covers AI-INT-003 and
+  AI-INT-004.
+- **AC-027:** Query absence tests cover a match disappearing between polls,
+  every `.or()` branch, branch filters, one-shot `nowait()`, boolean timeout,
+  and erroring timeout behavior. Query and waiting documentation distinguish
+  full-query absence from concrete-element staleness. Covers AI-INT-005.

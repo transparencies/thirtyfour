@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::common::command::Command;
 use crate::error::{WebDriverError, WebDriverErrorInner};
+use crate::extensions::query::ElementWaitable;
 use crate::js::SIMULATE_DRAG_AND_DROP;
 use crate::session::handle::SessionHandle;
 use crate::support::base64_decode;
@@ -319,6 +320,35 @@ impl WebElement {
     pub async fn click(&self) -> WebDriverResult<()> {
         self.handle.cmd(Command::ElementClick(self.element_id.clone())).await?;
         Ok(())
+    }
+
+    /// Wait for the WebElement to be displayed and enabled, then click it.
+    ///
+    /// This is equivalent to `self.wait_until().clickable().await?; self.click().await`. Here,
+    /// clickable means displayed and enabled; it is not a complete interactability guarantee.
+    /// This method acts on this already-resolved element, clicks once, and does not re-resolve a
+    /// stale element, retry a failed click, or wait for an outcome. The click can still fail if,
+    /// for example, another element intercepts it after the readiness check.
+    ///
+    /// # Example:
+    /// ```no_run
+    /// # use thirtyfour::prelude::*;
+    /// # use thirtyfour::support::block_on;
+    /// #
+    /// # fn main() -> WebDriverResult<()> {
+    /// #     block_on(async {
+    /// #         let caps = DesiredCapabilities::chrome();
+    /// #         let driver = WebDriver::new("http://localhost:4444", caps).await?;
+    /// let elem = driver.find(By::Id("button1")).await?;
+    /// elem.click_when_ready().await?;
+    /// #         driver.quit().await?;
+    /// #         Ok(())
+    /// #     })
+    /// # }
+    /// ```
+    pub async fn click_when_ready(&self) -> WebDriverResult<()> {
+        self.wait_until().clickable().await?;
+        self.click().await
     }
 
     /// Clear the WebElement contents.

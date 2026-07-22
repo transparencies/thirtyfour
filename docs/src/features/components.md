@@ -200,6 +200,41 @@ Every resolver field exposes the same handful of methods:
 | `.invalidate()`              | Drop the cache without querying. The next `.resolve()` will run the query again.     |
 | `.validate().await?`         | Return the cached value if it's still in the DOM, or `None`.                         |
 
+An `ElementResolver<WebElement>` also provides common element operations
+directly. Each method calls `resolve_present()` first, then forwards to the
+resolved `WebElement`:
+
+| Method                              | Returns                         | Behaviour                                             |
+| ----------------------------------- | ------------------------------- | ----------------------------------------------------- |
+| `.click().await?`                   | `()`                            | Resolve a present element and click it.                |
+| `.click_when_ready().await?`        | `()`                            | Resolve, wait until displayed and enabled, then click. |
+| `.clear().await?`                   | `()`                            | Resolve and clear the element's contents.              |
+| `.send_keys(value).await?`          | `()`                            | Resolve and send keys to the element.                  |
+| `.text().await?`                    | `String`                        | Resolve and return its rendered text.                  |
+| `.value().await?`                   | `Option<String>`                | Resolve and return its `value` property.               |
+
+The resolver receiver makes the re-resolution behavior part of the API, so the
+methods deliberately use the same names as `WebElement`:
+
+```rust
+self.email.clear().await?;
+self.email.send_keys("ada@example.test").await?;
+self.submit.click_when_ready().await?;
+```
+
+These helpers validate and potentially re-query once before the operation.
+They do not retry the operation if the page changes afterward or wait for an
+application outcome.
+They are available only on `ElementResolver<WebElement>`, not resolvers of a
+Component, `Vec`, or another custom type. Each call validates independently. If
+two operations must target exactly the same node, resolve once instead:
+
+```rust
+let email = self.email.resolve_present().await?;
+email.clear().await?;
+email.send_keys("ada@example.test").await?;
+```
+
 Two macros wrap the most common calls:
 
 ```rust
