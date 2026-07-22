@@ -104,6 +104,17 @@ in [`todo.md`](../todo.md).
 - **AI-TRANS-004 (confirmed):** The guide must link to the canonical query,
   waiting, Component, manager, manual WebDriver, and reliable-test guidance and
   be discoverable from the mdBook navigation and AI quickstart.
+- **AI-COMP-001 (confirmed):** When the `component` feature is enabled, the
+  prelude must export the `Component` derive/trait name and `ElementResolver`
+  so the recommended `use thirtyfour::prelude::*;` import supports the common
+  Component path.
+- **AI-COMP-002 (confirmed):** The `resolve!` and `resolve_present!` helper
+  macros must remain explicit crate-root imports. They are optional shorthand,
+  and adding generic macro names to the wildcard prelude would introduce
+  unnecessary collision risk.
+- **AI-COMP-003 (confirmed):** Component rustdoc, mdBook guidance, examples,
+  and tests must use the preferred import style and describe its `component`
+  feature gate consistently.
 
 ## Acceptance criteria
 
@@ -161,3 +172,8 @@ in [`todo.md`](../todo.md).
   table of common nonexistent APIs. Covers AI-TRANS-003.
 - **AC-019:** The mdBook summary and AI quickstart link to the translation
   guide, which links onward to each deeper guide in AI-TRANS-004.
+- **AC-020:** With default features, Component examples compile with
+  `thirtyfour::prelude::*` supplying `Component` and `ElementResolver`, while
+  resolver macros use explicit root imports. Crate rustdoc, mdBook Component
+  guidance, the playground example, and Component integration tests show the
+  same import contract. Covers AI-COMP-001 through AI-COMP-003.
