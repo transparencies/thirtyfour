@@ -46,10 +46,12 @@ pub(crate) use bail;
 /// - `id = "..."`: Select element by id.
 /// - `tag = "..."`: Select element by tag name.
 /// - `link = "..."`: Select element by link text.
+/// - `partial_link = "..."`: Select element by partial link text.
 /// - `css = "..."`: Select element by CSS.
 /// - `xpath = "..."`: Select element by XPath.
 /// - `name = "..."`: Select element by name.
 /// - `class = "..."`: Select element by class name.
+/// - `testid = "..."`: Select element by `data-testid`.
 ///
 /// Optional attributes available within `#[by(..)]` include:
 /// - `single`: (default, single element only) Return `NoSuchElement` if the number of elements

@@ -74,16 +74,17 @@ A few things are happening here:
 Every resolver field needs a `#[by(...)]` attribute. The first part
 picks the selector:
 
-| Attribute            | Selector used    |
-| -------------------- | ---------------- |
-| `id = "..."`         | `By::Id`         |
-| `css = "..."`        | `By::Css`        |
-| `xpath = "..."`      | `By::XPath`      |
-| `tag = "..."`        | `By::Tag`        |
-| `class = "..."`      | `By::ClassName`  |
-| `name = "..."`       | `By::Name`       |
-| `link = "..."`       | `By::LinkText`   |
-| `testid = "..."`     | `By::Testid`     |
+| Attribute                | Selector used          |
+| ------------------------ | ---------------------- |
+| `id = "..."`             | `By::Id`               |
+| `css = "..."`            | `By::Css`              |
+| `xpath = "..."`          | `By::XPath`            |
+| `tag = "..."`            | `By::Tag`              |
+| `class = "..."`          | `By::ClassName`        |
+| `name = "..."`           | `By::Name`             |
+| `link = "..."`           | `By::LinkText`         |
+| `partial_link = "..."`   | `By::PartialLinkText`  |
+| `testid = "..."`         | `By::Testid`           |
 
 Pair the selector with extra options, comma-separated. Which options
 apply depends on whether the resolver is single or multi (the macro
