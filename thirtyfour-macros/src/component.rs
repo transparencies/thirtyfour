@@ -264,6 +264,7 @@ enum ByToken {
     Id(Literal),
     Tag(Literal),
     LinkText(Literal),
+    PartialLinkText(Literal),
     Css(Literal),
     XPath(Literal),
     Name(Literal),
@@ -292,6 +293,7 @@ impl ByToken {
             ByToken::Id(_)
             | ByToken::Tag(_)
             | ByToken::LinkText(_)
+            | ByToken::PartialLinkText(_)
             | ByToken::Css(_)
             | ByToken::XPath(_)
             | ByToken::Name(_)
@@ -438,6 +440,13 @@ impl TryFrom<Meta> for ByToken {
                         lit: Lit::Str(v),
                         ..
                     }),
+                ) if k.is_ident("partial_link") => Ok(ByToken::PartialLinkText(v.token())),
+                (
+                    k,
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Str(v),
+                        ..
+                    }),
                 ) if k.is_ident("css") => Ok(ByToken::Css(v.token())),
                 (
                     k,
@@ -530,6 +539,7 @@ impl ByTokens {
                 ByToken::Id(id) => ret.push(quote! { By::Id(#id) }),
                 ByToken::Tag(tag) => ret.push(quote! { By::Tag(#tag) }),
                 ByToken::LinkText(text) => ret.push(quote! { By::LinkText(#text) }),
+                ByToken::PartialLinkText(text) => ret.push(quote! { By::PartialLinkText(#text) }),
                 ByToken::Css(css) => ret.push(quote! { By::Css(#css) }),
                 ByToken::XPath(xpath) => ret.push(quote! { By::XPath(#xpath) }),
                 ByToken::Name(name) => ret.push(quote! { By::Name(#name) }),
@@ -685,6 +695,7 @@ impl ToTokens for DebugByTokens {
                 ByToken::Id(lit)
                 | ByToken::Tag(lit)
                 | ByToken::LinkText(lit)
+                | ByToken::PartialLinkText(lit)
                 | ByToken::Css(lit)
                 | ByToken::XPath(lit)
                 | ByToken::Name(lit)
@@ -1007,5 +1018,31 @@ fn fix_type(mut ty: syn::Path) -> TokenStream {
         None => {
             quote! {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quote::quote;
+    use syn::parse_quote;
+
+    #[test]
+    fn partial_link_selector_expands_to_by_partial_link_text() {
+        let input = parse_quote! {
+            struct LinkComponent {
+                base: ::thirtyfour::WebElement,
+                #[by(partial_link = "guide")]
+                link: ::thirtyfour::components::ElementResolver<::thirtyfour::WebElement>,
+            }
+        };
+
+        let expanded = expand_component_derive(input).to_string();
+        let expected = quote! { By::PartialLinkText("guide") }.to_string();
+
+        assert!(
+            expanded.contains(&expected),
+            "expected expansion to contain `{expected}`, got `{expanded}`"
+        );
     }
 }
