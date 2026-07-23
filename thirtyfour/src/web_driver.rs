@@ -122,13 +122,42 @@ impl WebDriver {
         &self.handle
     }
 
+    /// Atomically replace the configuration used by this driver session.
+    ///
+    /// The new configuration is shared by all clones and elements associated
+    /// with this session. Changing [`WebDriverConfig::request_timeout`] does
+    /// not reconfigure the existing HTTP client because its timeout is fixed
+    /// when the client is created.
+    pub fn set_config(&self, config: WebDriverConfig) {
+        self.handle.set_config(config);
+    }
+
+    /// Atomically replace the default element poller used by this driver
+    /// session.
+    ///
+    /// The new poller is shared by all clones and elements associated with
+    /// this session. Queries and waiters that have already been created keep
+    /// their existing poller.
+    pub fn set_poller(&self, poller: Arc<dyn IntoElementPoller + Send + Sync>) {
+        self.handle.set_poller(poller);
+    }
+
     /// Clone this `WebDriver` keeping the session handle, but supplying a new `WebDriverConfig`.
     ///
     /// This still uses the same underlying client, and still controls the same browser
     /// session, but uses a different `WebDriverConfig` for this instance.
     ///
-    /// This is useful in cases where you want to specify a custom poller configuration (or
-    /// some other configuration option) for only one instance of `WebDriver`.
+    /// Prefer configuring [`WebDriverBuilder`] or
+    /// [`WebDriverManagerBuilder`](crate::manager::WebDriverManagerBuilder) before creating the
+    /// session. For query-specific polling behavior, use
+    /// [`ElementQuery::with_poller`](crate::extensions::query::ElementQuery::with_poller).
+    ///
+    /// This method creates a separate [`SessionHandle`] that participates in synchronous teardown
+    /// when dropped, so dropping either driver can terminate the shared browser session.
+    #[deprecated(
+        since = "0.37.4",
+        note = "configure WebDriverBuilder or WebDriverManagerBuilder before creating the session; clone_with_config() creates a separate SessionHandle that can tear down the shared session when dropped"
+    )]
     pub fn clone_with_config(&self, config: WebDriverConfig) -> Self {
         Self {
             handle: Arc::new(self.handle.clone_with_config(config)),

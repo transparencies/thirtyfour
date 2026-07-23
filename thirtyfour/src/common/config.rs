@@ -23,7 +23,14 @@ pub struct WebDriverConfig {
     /// Per-request HTTP timeout. Applied to the default reqwest-based
     /// [`HttpClient`]; custom client implementations may also honour it.
     ///
+    /// The HTTP client is configured when the session is created. Replacing
+    /// this config later via [`WebDriver::set_config`] or
+    /// [`SessionHandle::set_config`] does not change the existing client's
+    /// timeout.
+    ///
     /// [`HttpClient`]: crate::session::http::HttpClient
+    /// [`SessionHandle::set_config`]: crate::session::handle::SessionHandle::set_config
+    /// [`WebDriver::set_config`]: crate::WebDriver::set_config
     pub request_timeout: Duration,
 }
 

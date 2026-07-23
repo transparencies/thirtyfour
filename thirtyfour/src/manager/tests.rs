@@ -18,6 +18,8 @@ use super::status::{DriverLogLine, Emitter, LogSubscribers, Status};
 use super::version::DriverVersion;
 use super::{StdioMode, WebDriverManager};
 use crate::Capabilities;
+use crate::common::config::WebDriverConfig;
+use crate::extensions::query::{ElementPollerNoWait, ElementPollerWithTimeout, IntoElementPoller};
 
 #[test]
 fn builder_defaults_match_match_local() {
@@ -58,6 +60,33 @@ fn builder_offline_toggle() {
 fn builder_stdio() {
     let mgr = WebDriverManager::builder().stdio(StdioMode::Null).build();
     assert!(matches!(mgr.cfg.stdio, StdioMode::Null));
+}
+
+#[test]
+fn builder_web_driver_config() {
+    let config = WebDriverConfig::builder()
+        .keep_alive(false)
+        .request_timeout(Duration::from_secs(42))
+        .build()
+        .unwrap();
+    let manager = WebDriverManager::builder().config(config).build();
+
+    assert!(!manager.web_driver_config.keep_alive);
+    assert_eq!(manager.web_driver_config.request_timeout, Duration::from_secs(42));
+}
+
+#[test]
+fn builder_poller_replaces_config_poller() {
+    let initial_poller: Arc<dyn IntoElementPoller + Send + Sync> =
+        Arc::new(ElementPollerWithTimeout::default());
+    let replacement_poller: Arc<dyn IntoElementPoller + Send + Sync> =
+        Arc::new(ElementPollerNoWait);
+    let config = WebDriverConfig::builder().poller(initial_poller).build().unwrap();
+
+    let manager =
+        WebDriverManager::builder().config(config).poller(Arc::clone(&replacement_poller)).build();
+
+    assert!(Arc::ptr_eq(&manager.web_driver_config.poller, &replacement_poller));
 }
 
 #[test]
