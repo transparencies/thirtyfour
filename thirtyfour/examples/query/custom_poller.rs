@@ -8,7 +8,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use thirtyfour::common::config::WebDriverConfig;
 use thirtyfour::extensions::query::ElementPollerWithTimeout;
 use thirtyfour::prelude::*;
 
@@ -33,17 +32,15 @@ async fn main() -> anyhow::Result<()> {
         .displayed()
         .await?;
 
-    // Use a custom poller instance.
+    // Replace the default poller for subsequent queries and waits.
     let my_poller =
         Arc::new(ElementPollerWithTimeout::new(Duration::from_secs(120), Duration::from_secs(1)));
-    let new_config = WebDriverConfig::builder().poller(my_poller).build()?;
-    let my_driver = driver.clone_with_config(new_config);
+    driver.set_poller(my_poller);
 
     // Perform query using custom poller.
-    let elem_form = my_driver.query(By::Id("search-form")).single().await?;
+    let elem_form = driver.query(By::Id("search-form")).single().await?;
 
-    // Perform element wait using custom poller. Elements always inherit the `WebDriverConfig` from
-    // the `WebDriver` instance that found them.
+    // Perform element wait using the current poller from the shared session configuration.
     elem_form.wait_until().displayed().await?;
 
     // Always explicitly close the browser. This prevents the executor from being blocked

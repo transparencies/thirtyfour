@@ -15,6 +15,7 @@ use url::Url;
 use crate::Capabilities;
 use crate::common::config::WebDriverConfig;
 use crate::error::{WebDriverError, WebDriverResult};
+use crate::extensions::query::IntoElementPoller;
 use crate::session::DriverGuard;
 use crate::session::create::start_session;
 use crate::session::handle::SessionHandle;
@@ -50,6 +51,8 @@ fn default_cache_dir() -> PathBuf {
 /// [`WebDriver::managed`]: crate::WebDriver::managed
 pub struct WebDriverManager {
     pub(crate) cfg: ResolvedConfig,
+    /// Configuration applied to every WebDriver session launched by this manager.
+    pub(crate) web_driver_config: WebDriverConfig,
     /// HTTP client used for fetching upstream metadata and binaries.
     download_client: reqwest::Client,
     /// Map from `(browser, resolved_version)` to a Weak handle on a live driver.
@@ -72,7 +75,10 @@ pub struct WebDriverManager {
 
 impl std::fmt::Debug for WebDriverManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WebDriverManager").field("cfg", &self.cfg).finish_non_exhaustive()
+        f.debug_struct("WebDriverManager")
+            .field("cfg", &self.cfg)
+            .field("web_driver_config", &self.web_driver_config)
+            .finish_non_exhaustive()
     }
 }
 
@@ -178,6 +184,8 @@ pub struct WebDriverManagerBuilder {
     pub(crate) status_subscribers: Vec<StatusCallback>,
     /// Driver-log subscribers registered before `build`.
     pub(crate) log_subscribers: Vec<DriverLogCallback>,
+    /// Configuration applied to every WebDriver session launched by the manager.
+    pub(crate) web_driver_config: WebDriverConfig,
     /// Set when constructed via `WebDriver::managed(caps)`.
     pub(crate) preloaded_caps: Option<Capabilities>,
 }
@@ -196,6 +204,7 @@ impl std::fmt::Debug for WebDriverManagerBuilder {
             .field("driver_paths", &self.driver_paths)
             .field("status_subscribers", &self.status_subscribers.len())
             .field("log_subscribers", &self.log_subscribers.len())
+            .field("web_driver_config", &self.web_driver_config)
             .finish_non_exhaustive()
     }
 }
@@ -215,12 +224,31 @@ impl Clone for WebDriverManagerBuilder {
             driver_paths: self.driver_paths.clone(),
             status_subscribers: self.status_subscribers.iter().map(Arc::clone).collect(),
             log_subscribers: self.log_subscribers.iter().map(Arc::clone).collect(),
+            web_driver_config: self.web_driver_config.clone(),
             preloaded_caps: self.preloaded_caps.clone(),
         }
     }
 }
 
 impl WebDriverManagerBuilder {
+    /// Set the configuration used by every [`WebDriver`] session launched by
+    /// the resulting manager.
+    pub fn config(mut self, config: WebDriverConfig) -> Self {
+        self.web_driver_config = config;
+        self
+    }
+
+    /// Set the element poller used by every [`WebDriver`] session launched by
+    /// the resulting manager.
+    ///
+    /// This replaces the poller in the current [`WebDriverConfig`], including
+    /// a configuration previously supplied via
+    /// [`WebDriverManagerBuilder::config`].
+    pub fn poller(mut self, poller: Arc<dyn IntoElementPoller + Send + Sync>) -> Self {
+        self.web_driver_config.poller = poller;
+        self
+    }
+
     /// Pick a driver version. See [`DriverVersion`] for variants.
     pub fn version(mut self, v: DriverVersion) -> Self {
         self.version = v;
@@ -408,6 +436,7 @@ impl WebDriverManagerBuilder {
             std::mem::forget(log_subscribers.add_arc(cb));
         }
         Arc::new(WebDriverManager {
+            web_driver_config: self.web_driver_config,
             download_client: reqwest::Client::builder()
                 .build()
                 .expect("default reqwest client should always build"),
@@ -486,7 +515,7 @@ impl WebDriverManager {
             .parse()
             .map_err(|e| WebDriverError::ParseError(format!("invalid driver url: {e}")))?;
 
-        let config = WebDriverConfig::default();
+        let config = self.web_driver_config.clone();
         let client = create_reqwest_client(config.request_timeout);
         let client_arc: Arc<dyn crate::session::http::HttpClient> = Arc::new(client);
         self.emitter.emit(Status::SessionStarting {
