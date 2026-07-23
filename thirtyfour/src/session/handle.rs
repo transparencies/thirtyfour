@@ -42,7 +42,7 @@ pub struct SessionHandle {
     /// for BiDi).
     capabilities: Arc<Capabilities>,
     /// Atomically replaceable config used by this instance.
-    config: Arc<ArcSwap<WebDriverConfig>>,
+    config: ArcSwap<WebDriverConfig>,
     /// quit session flag
     quit: Arc<OnceCell<()>>,
     /// Lazily-connected WebDriver BiDi handle, shared by every clone of the
@@ -84,7 +84,7 @@ impl SessionHandle {
             server_url: Arc::new(server_url.into_url()?),
             session_id,
             capabilities: Arc::new(capabilities),
-            config: Arc::new(ArcSwap::from_pointee(config)),
+            config: ArcSwap::from_pointee(config),
             quit: Arc::new(OnceCell::new()),
             #[cfg(feature = "bidi")]
             bidi: Arc::new(OnceCell::new()),
@@ -104,7 +104,7 @@ impl SessionHandle {
             quit: Arc::clone(&self.quit),
             #[cfg(feature = "bidi")]
             bidi: Arc::clone(&self.bidi),
-            config: Arc::new(ArcSwap::from_pointee(config)),
+            config: ArcSwap::from_pointee(config),
             driver_guard: self.driver_guard.clone(),
         }
     }
@@ -1282,7 +1282,7 @@ impl Drop for SessionHandle {
             quit: Arc::clone(&self.quit),
             session_id: self.session_id.clone(),
             capabilities: Arc::clone(&self.capabilities),
-            config: Arc::clone(&self.config),
+            config: ArcSwap::from(self.config.load_full()),
             #[cfg(feature = "bidi")]
             bidi: Arc::clone(&self.bidi),
             // The guard stays on the *original* SessionHandle so it drops after
